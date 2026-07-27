@@ -140,6 +140,40 @@ Next (for whoever picks up remediation, NOT this chat): work the
 SECURITY_AUDIT_PRELIMINARY.md priority queue, reproduce each item before
 fixing. OPS-1 (rotate the working-tree token) is a human action.
 
+## 2026-07-27 16:15 -- OVERNIGHT SESSION ARMED; VHOST-USER SKELETON LANDED
+Plan: human going to bed; maximize unattended progress (protocol 09).
+Done:
+- s3-tests v2 "crash" triaged: MY setup bug -- --timeout-method=thread
+  aborts the WHOLE pytest run on the first hung test (died 11:34 after
+  7 min); AND the completion watcher never fired because its pgrep
+  pattern matched its own command line (self-match trap, second bite).
+  Both banked. Cluster itself healthy.
+- Overnight chain launched as a TRACKED task (/tmp/overnight_chain.sh,
+  log /tmp/overnight/chain.log): (1) s3-tests baseline v3 with SIGNAL
+  per-test timeouts, 3 h cap; (2) NBD race verification, pre-fix plugin
+  (built from main into /tmp/nbdkit-viperblock-plugin-PREFIX.so) vs
+  post-fix, 60 write+reconnect iterations each; (3) cluster shutdown +
+  orphan sweep. Sentinel /tmp/overnight/CHAIN_DONE.
+- P0.2 groundwork: one-command regression runner written
+  (project_management/tools/run_regressions.sh): six suites, one
+  PASS/FAIL/SKIP line each + tally; predastore suite auto-skips when a
+  dev cluster is up (fixture port collision guard). First validation
+  run launched as a tracked task; results to journal on completion.
+- F7 first code slice LANDED (viperblock branch
+  feat/data-path-vhost-user-blk commit a783271, pushed): vhost-user
+  control-plane codec (fd passing, mem-table, user->GPA translation) +
+  split-virtqueue parsing (avail pop, chain walk with loop detection,
+  used publish), amd64 memory-ordering documented; 5 unit tests green
+  against synthetic guest memory.
+Failed/learned: pytest-timeout thread method = run-abort (use signal);
+  the pgrep self-match trap now has TWO scalps -- watchers must match on
+  file sentinels, never process names.
+Metrics: vhostuser slice ~500 lines with tests, unit suite 6 ms.
+Fork movement: none (F2 still awaiting human ack; F7 in build).
+Next (morning): read chain + runner results; freeze P-1.7 counts;
+record race pre/post numbers into the fix commit's branch; continue
+vhost-user daemon loop (kick/call eventfds + engine wiring).
+
 ## 2026-07-27 14:45 -- IN-GUEST RIG LIVE; NBD LIFECYCLE RACE FIXED
 ##                     (VERIFICATION QUEUED BEHIND THE BUSY CLUSTER)
 Plan: work that neither blocks on nor disturbs the running s3-tests.

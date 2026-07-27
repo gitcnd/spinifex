@@ -2,16 +2,17 @@
 
 <!-- Overwrite-in-place. History lives in JOURNAL.md. -->
 
-Last updated: 2026-07-27 14:50 (in-guest rig live and reusable; NBD
-lifecycle race root-caused + fixed pending verification; s3-tests
-completion watcher armed -- no human ping needed)
+Last updated: 2026-07-27 16:20 (OVERNIGHT MODE: chain running -- s3-tests
+v3 baseline, then automated NBD-race pre/post verification, then cluster
+shutdown; regression-runner validation also running; vhost-user codec +
+virtqueue slice landed with green unit tests)
 Current phase: Phase -1 (de-risk and baseline), 4/9 [x], 3/9 [~]
-Current slice: Debian 13 rig VM (kernel 6.12) boots no-root under
-qemu-kvm with SSH + fio provisioned; overlay kept for instant reuse
-(../vm-images/). NBD close/open lifecycle race fixed with a mutex
-(viperblock fix/nbd-close-open-race commit 6a871d2) -- verification
-queued behind the cluster (busy with the 838-test s3-tests baseline,
-still running under a tracked watcher).
+Current slice: F7 vhost-user skeleton (viperblock commit a783271):
+protocol codec + split-ring parsing, 5 unit tests, no QEMU needed yet.
+Overnight chain artifacts will land in /tmp/overnight/ (chain.log,
+s3tests_baseline3.txt, race_results.txt, CHAIN_DONE sentinel).
+NOTE: v2 "crash" was my harness bug (pytest thread-timeouts abort the
+run) plus a self-matching watcher; both fixed and banked.
 
 ## NEEDS HUMAN
 
