@@ -47,11 +47,13 @@ Nothing blocking. Non-blocking queue:
   - project-management: working documents (this folder).
   - feat/ebs-volume-types-and-snapshot-api, feat/ebs-qos-enforcement,
     feat/outposts-service-parity: created, no commits yet.
-- ../viperblock (LOCAL-ONLY until forked):
+- ../viperblock (pushed to gitcnd/viperblock):
   - feat/crash-consistency-harness: P-1.3 harness + 25-cycle evidence
     (commits 8723789, 40b9ef8). ACTIVE.
   - feat/replicated-wal-durability: Phase 1 core (awaits F2 evidence).
-- ../predastore (LOCAL-ONLY until forked):
+  - (planned when F7 evidence lands): feat/data-path-vhost-user-blk or
+    feat/data-path-ublk, per gate P-1.9.
+- ../predastore (pushed to gitcnd/predastore):
   - feat/shard-healer-and-read-repair: availability probe + P-1.6
     baseline (commit dbe31cf). ACTIVE.
   - feat/s3-api-surface-completion.
@@ -80,6 +82,11 @@ Nothing blocking. Non-blocking queue:
 - Research, machine audit, phased plan, fork registry. JOURNAL entry 1.
 
 ## Next action
+0. NEW (human, 2026-07-27): data-path fork F7 -- replace nbdkit. First
+   evidence step is inside P-1.5: split the perf baseline into engine
+   level vs NBD path to quantify the nbdkit tax, then prototype
+   vhost-user-blk / ublk (gate P-1.9). See DECISIONS.md F7 for the
+   candidate analysis.
 1. P-1.4: WAL-replication latency prototype (informs MAJOR fork F2):
    measure (b) peer-process replication vs (c) per-write small-object PUT
    to a local predastore dev server (3node-loopback recipe in

@@ -66,9 +66,13 @@ that must meet them -- never after the implementation.
       network and (c) Predastore small-object PUTs; report added write
       latency (p50/p99) and sustained IOPS versus the P-1.5 baseline.
       Oracle: fio numbers, same rig both sides.
-- [ ] P-1.5 Performance baseline frozen: fio 4k randwrite/randread and
-      128k seq through the NBD path on the dev deployment; IOPS, p50/p99
-      latency, throughput recorded to a frozen CSV. Oracle: fio.
+- [ ] P-1.5 Performance baseline frozen, SPLIT BY LAYER (feeds fork F7):
+      (i) viperblock engine-level (direct WriteAt/ReadAt bench) and
+      (ii) full NBD path (fio in the dev deployment through
+      qemu -> nbdkit -> viperblock): 4k randwrite/randread + 128k seq;
+      IOPS, p50/p99 latency, throughput to a frozen CSV. The (ii)-(i)
+      delta quantifies the nbdkit/NBD tax the human flagged. Oracle: fio
+      + the engine bench, same host, same volume config.
 - [~] P-1.6 Predastore failure/repair baseline: 3-node dev cluster; kill
       one node under load; measure (a) object availability during outage
       (RS reconstruction works: target 100% of readable objects), (b) what
@@ -93,6 +97,15 @@ that must meet them -- never after the implementation.
       box ticks on the honest baseline, not on a pass-rate.
 - [ ] P-1.8 Human notified: Phase -1 review; forks F0/F1 answered, F2
       decided from P-1.4 evidence.
+- [ ] P-1.9 Data-path candidates measured (fork F7, ADDED 2026-07-27 at
+      the human's request: "nbdkit is a bottleneck ... needs to be
+      replaced with a block device driver"): prototype at least one of
+      vhost-user-blk / ublk backed by the viperblock engine (plus the
+      cheap native-Go-NBD-server variant if the P-1.5 delta justifies
+      it); measure the same fio matrix as P-1.5 and report the
+      improvement over the nbdkit path. Gate: honest numbers for >= 2
+      alternatives (counting native-NBD) sufficient to move F7 to
+      LEANING with evidence. Oracle: fio, same rig as P-1.5.
 
 ## Phase 0 -- Harness and regression infrastructure
 

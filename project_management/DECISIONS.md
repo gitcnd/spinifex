@@ -125,3 +125,38 @@ Decision: one branch per feature-gap component, per the human's explicit
 Evidence: token probes 2026-07-27 (GET /user 200; gitcnd/spinifex
   push:true admin:true; POST /repos/mulgadc/*/forks -> Bad credentials).
 Revisit trigger: human forks the two sibling repos or widens the token.
+
+## F7 -- Guest block-device data path (replace nbdkit)  [MAJOR]
+Status: OPEN (human-initiated 2026-07-27: "nbdkit is a bottleneck - that
+  needs to be replaced with a block device driver")
+Decision: (pending measurement)
+Context: today guest virtio-blk -> QEMU NBD client -> socket -> nbdkit
+  (C shim) -> Go plugin -> viperblock. Every IO pays protocol framing,
+  extra copies, and a process hop. Candidates, cheapest first:
+  (a) Native Go NBD server inside viperblockd (drop nbdkit, keep NBD):
+      removes the extra process + C boundary; multi-conn + Unix socket.
+      Low risk, modest gain; also fixes the nbd/-missing-from-module-zip
+      packaging gap.
+  (b) vhost-user-blk backend around the viperblock engine; QEMU
+      vhost-user-blk-pci hands the guest's virtio queues to our daemon
+      over shared memory, bypassing QEMU's block layer and all sockets
+      (the SPDK pattern). Biggest VM-path gain; medium effort.
+  (c) ublk (io_uring userspace block driver, kernel 6.x): viperblock
+      serves a real /dev/ublkbN; uniquely enables HOST-side attach
+      (format/mount volumes on the node), guest path still goes through
+      QEMU block layer.
+  (d) NVMe-oF TCP target: standard kernel initiators, multi-queue +
+      multipath for free; most protocol work; strongest multi-node
+      attach story (relevant to EBS multi-attach later).
+Evidence: none yet. Required before LEANING: P-1.5 baseline split into
+  engine-level vs NBD-path fio numbers (quantify what nbdkit actually
+  costs), then a prototype of (b) and/or (c) measured against it
+  (gate P-1.9). Note (a) can proceed as a low-risk step regardless of
+  the endgame choice if the baseline confirms the nbdkit tax.
+Revisit trigger: P-1.9 numbers; also revisit if QEMU/kernel versions on
+  target deployments (Debian 13) constrain (b)/(c).
+Escalation path: (b) vhost-user-blk is the presumptive endgame for VM
+  IO; (c) ublk complements it for host-side attach rather than
+  competing. A native QEMU block driver in C (cgo into viperblock) was
+  considered and rejected upfront: highest maintenance burden against
+  QEMU internals for no advantage over (b).
