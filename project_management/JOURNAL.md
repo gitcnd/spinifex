@@ -70,6 +70,43 @@ F5 opened (LEANING ceph/s3-tests).
 Next: get human answers on F0/F1 and the NEEDS HUMAN resource items; then
 Phase -1 starting with P-1.1 (baseline unit+integration on this machine).
 
+## 2026-07-27 09:20 -- P-1.4 DECIDES F2 (LEANING PEER REPLICATION);
+##                     P-1.5 ENGINE BASELINE FROZEN
+Plan: run the two measurement gates queued in STATUS: engine perf
+baseline (P-1.5 part i) and the F2 durability prototype (P-1.4).
+Done:
+- perfbench (viperblock feat/crash-consistency-harness commit 19adcf3):
+  engine-level bench through the production open sequence. Frozen CSV:
+  tests/perfbench/results/2026-07-27_engine_baseline_xfs_ssd.csv.
+  Headlines: randwrite-4k p50 5 us (pure memory ack) with MAX 175-420 s
+  (writes block for MINUTES behind synchronous drains under sustained
+  load -- a guest-visible freeze; new Phase 1 concern named alongside
+  durability); flush barrier p50 8.9 ms / p99 100 ms at 4 MiB dirty;
+  randread-4k 6.1k IOPS @1 worker, 92.6k @16; seqwrite-128k 117 MB/s.
+- f2walrepl prototype (viperblock feat/replicated-wal-durability commit
+  f7d5ca1): three candidate mechanisms measured, 4 KiB records:
+  local fsync p50 5627 us == peer-replicated p50 5630 us (same run;
+  replication is FREE relative to the fsync it requires; localhost RTT
+  caveat recorded); predastore per-write PUT p50 77.6 ms @c1, 293 ms
+  @c16, ~50 ops/s ceiling -> option (c) REJECTED. F2 moved to LEANING
+  (b) synchronous peer WAL replication; human ack pending (MAJOR).
+Failed/learned:
+- Predastore loopback cluster: forgetting SSL_CERT_FILE at launch fails
+  as "unknown authority" on the :6660 db API; recipe updated in
+  ENVIRONMENT.md (bit twice today).
+- Absolute disk-latency numbers on this shared host swing 3.5x with
+  ambient IO; A-vs-B latency claims must be same-run (banked as a trap).
+- perfbench's first f2 peer run overlapped the background baseline and
+  polluted the numbers; reran quiet. Same lesson as above.
+Metrics: perfbench full run ~24 min (prefill+drains dominate); f2
+  prototype ~2.5 min local+peer, ~35 s s3put; predastore cluster
+  start/stop ~40 s.
+Fork movement: F2 OPEN -> LEANING (b). F7 unchanged (P-1.5(ii) NBD leg
+  still needed for the nbdkit tax number).
+Next: F7/P-1.9 rig (nbdkit via rpm-extract or source build, or straight
+  to the native-Go-NBD + vhost-user-blk prototypes); P-1.3 power-loss
+  leg; P-1.7 s3-tests baseline.
+
 ## 2026-07-27 07:50 -- STORAGE REPOS PUSHED; DNS FIX VERIFIED; ONE
 ##                     ATTRIBUTION CORRECTED
 Plan: use the human's DNS fix + widened token; push storage branches.

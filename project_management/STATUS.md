@@ -2,17 +2,16 @@
 
 <!-- Overwrite-in-place. History lives in JOURNAL.md. -->
 
-Last updated: 2026-07-27 06:40 (Phase -1: P-1.1 [x]; P-1.3 SIGKILL leg
-done, 0 flushed-write losses in 25 crash cycles; P-1.6 baseline measured:
-predastore single-node outage = reads 100% available but ~2320x slower,
-writes 0% available)
-Current phase: Phase -1 (de-risk and baseline), 1/8 [x], 2/8 [~]
-Current slice: predastore availability probe + single-node-kill baseline
-on branch feat/shard-healer-and-read-repair (commit dbe31cf): healthy
-read 200/200 in 0.82 s; one node killed -> read 200/200 in 1907.56 s
-(dead-node timeouts every read), PUTs 0/10, CreateBucket fails. Phase 2
-scope must include failure detection + degraded writes + metadata
-failover, not just the healer.
+Last updated: 2026-07-27 09:25 (P-1.4 [x] -- F2 leaning peer replication
+on measured numbers; P-1.5 engine leg frozen; new finding: sustained
+writes stall for minutes behind drains)
+Current phase: Phase -1 (de-risk and baseline), 2/9 [x], 3/9 [~]
+Current slice: F2 evidence landed (viperblock commit f7d5ca1): peer
+replication costs +3 us over local fsync (p50 5630 vs 5627 us same-run);
+per-write predastore PUTs 77-293 ms p50 -> rejected. Engine baseline
+frozen (commit 19adcf3): randwrite acks in 5 us but MAX 175-420 s
+(drain stalls = guest-visible freeze -- new Phase 1 concern); flush
+barrier p50 8.9 ms; randread 92.6k IOPS @16 workers.
 
 ## NEEDS HUMAN
 
@@ -20,6 +19,11 @@ Nothing blocking. Non-blocking queue:
 1. REVIEW: F0/F1 closed by your delegation (DECISIONS.md) -- Outposts
    parity = service-set first then thin outposts.* API; "predastore as
    EBS" = harden the whole Viperblock+Predastore stack. Object if wrong.
+1a. ACK REQUESTED (MAJOR fork F2): adopt synchronous peer WAL
+   replication as the acked-write durability mechanism. Evidence: it
+   costs +3 us over the local fsync we need anyway; the alternative
+   (per-write predastore PUTs) measured 14-52x worse (DECISIONS.md F2).
+   A "go" here unlocks Phase 1 implementation.
 2. RESOLVED 2026-07-27 07:45: human granted the token read+write on
    gitcnd/{spinifex,viperblock,predastore}; all storage branches + the
    v1.13.0 tag pushed to gitcnd/viperblock and gitcnd/predastore.
@@ -82,26 +86,25 @@ Nothing blocking. Non-blocking queue:
 - Research, machine audit, phased plan, fork registry. JOURNAL entry 1.
 
 ## Next action
-0. NEW (human, 2026-07-27): data-path fork F7 -- replace nbdkit. First
-   evidence step is inside P-1.5: split the perf baseline into engine
-   level vs NBD path to quantify the nbdkit tax, then prototype
-   vhost-user-blk / ublk (gate P-1.9). See DECISIONS.md F7 for the
-   candidate analysis.
-1. P-1.4: WAL-replication latency prototype (informs MAJOR fork F2):
-   measure (b) peer-process replication vs (c) per-write small-object PUT
-   to a local predastore dev server (3node-loopback recipe in
-   ENVIRONMENT.md); compare against a P-1.5 engine-level baseline.
+1. F7 / P-1.9 + P-1.5(ii): build the NBD-path rig -- get nbdkit without
+   root (dnf download + rpm2cpio extract to ~/opt, or source build),
+   build the viperblock nbdkit plugin (source in the git clone), measure
+   the fio matrix vs the frozen engine baseline; then prototype the
+   native-Go-NBD server and (stretch) vhost-user-blk (qemu-img bench can
+   drive NBD URIs without root).
 2. P-1.3 power-loss leg: QEMU guest (user networking, /usr/libexec/
    qemu-kvm) running the writer against an NBD-served volume; QMP quit
    mid-write; verify. Proves/disproves the Flush-no-fsync loss window
    (code reading says vb.Flush does not fsync -- 200 ms syncer only).
-3. When opening Phase 2: extend its gates per the P-1.6 implication --
+3. Human acks queued: F2 (peer replication -- see NEEDS HUMAN 1a).
+4. P-1.7: fetch ceph/s3-tests, baseline against the loopback cluster.
+5. When opening Phase 2: extend its gates per the P-1.6 implication --
    failure detection, read shortcutting, degraded/quorum writes, and
    bucket-metadata failover, in addition to the healer (JOURNAL entry 5).
-4. P-1.5: NBD-path fio baseline (belongs with the VM deployment work);
-   engine-level interim numbers acceptable if labeled as such.
-5. P-1.7: fetch ceph/s3-tests, baseline against the loopback cluster.
-6. Backlog: golden-response harness design (P0.3); P-1.6 wiped-store
+6. Phase 1 scope note (from the P-1.5 baseline): the drain-stall problem
+   (writes blocked for minutes under sustained load) joins durability as
+   a Phase 1 target -- likely bounded write-buffer + async drain tuning.
+7. Backlog: golden-response harness design (P0.3); P-1.6 wiped-store
    variant when healer work starts.
 
 ## Gate snapshot

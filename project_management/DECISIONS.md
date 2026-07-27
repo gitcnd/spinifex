@@ -56,9 +56,22 @@ Revisit trigger: human answer.
 Escalation path: proceed under (a) if delegated.
 
 ## F2 -- Durability architecture for acknowledged writes  [MAJOR]
-Status: OPEN (requires Phase -1 prototype measurements before LEANING)
-Decision: (pending)
-Options:
+Status: LEANING (b) synchronous peer WAL replication (2026-07-27, on
+  P-1.4 prototype numbers below; MAJOR, so human ack still required to
+  move to DECIDED)
+Decision: (pending human ack) option (b): ack = local WAL write +
+  synchronous replication to a peer node's WAL (group-commit fsync on
+  both), promote-on-failure. Option (c) per-write predastore PUTs is
+  REJECTED on evidence; option (a) local-fsync-only remains an interim
+  single-node mode.
+Evidence (P-1.4, viperblock proto/f2walrepl commit f7d5ca1, results/
+  2026-07-27_f2_durability_latency.txt): same-run 4 KiB acked-write p50:
+  local fsync 5627 us; peer-replicated (TCP + group commit) 5630 us --
+  replication adds ~3 us over the fsync it must pay anyway (localhost;
+  add ~0.1-0.5 ms for a real LAN). Per-write predastore PUT: 77643 us
+  p50 at concurrency 1, 293463 us at 16, ~50 ops/s ceiling -- 14-52x
+  worse and two orders of magnitude short on throughput.
+Options considered:
   (a) Ack-after-local-WAL-fsync (single node): cheapest; still loses the
       node's un-uploaded writes on host loss. AWS EBS acks only after
       intra-AZ replication, so this alone is not parity.
@@ -66,13 +79,13 @@ Options:
       promote on failure). Closest to real EBS architecture.
   (c) Quorum write of WAL records/small chunks straight to Predastore
       (leverages existing RS coding; latency risk -- per-write S3 PUT).
-Evidence: none yet. Phase -1 gates P-1.3 and P-1.4 exist to produce the
-  latency/IOPS numbers that decide this fork.
-Revisit trigger: Phase -1 prototype numbers; and if the chosen option
-  cannot keep write latency within the gate set from the Phase -1 baseline,
-  switch to the recorded runner-up.
-Escalation path: (b) is the presumptive winner if (c) measures too slow;
-  (a) is acceptable only as an interim mode, clearly labeled.
+Revisit trigger: real-LAN measurement when a second machine exists (the
+  localhost RTT caveat); and if implementation shows the replica cannot
+  keep up with sustained write bursts, revisit group-commit windows
+  before revisiting the architecture.
+Escalation path: (a) as a degraded single-node mode, clearly labeled;
+  (c) stays rejected unless predastore ever grows a sub-millisecond
+  small-object path.
 
 ## F3 -- Development environment on this host  [minor]
 Status: LEANING KVM guests

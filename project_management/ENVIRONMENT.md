@@ -95,7 +95,17 @@
   shim `sudo` to a no-op on PATH (trust-store install + `ip addr add` are
   skippable on Linux: 127.0.0.0/8 already routes to lo), delete
   /tmp/predastore/server.pem first so start.sh regenerates it with the
-  loopback SANs (inter-node TLS verifies SANs).
+  loopback SANs (inter-node TLS verifies SANs), AND launch with
+  SSL_CERT_FILE=/tmp/predastore/server.pem in the environment -- Go
+  treats it as the system root pool, replacing the trust-anchor install
+  the shimmed sudo skipped. Forgetting SSL_CERT_FILE bites as
+  "certificate signed by unknown authority" on the :6660 db API
+  (bit 2026-07-27, twice). Full working line:
+    PATH=/tmp/pd-shim:$PATH SSL_CERT_FILE=/tmp/predastore/server.pem \
+      ./scripts/start.sh -w 3node-loopback
+- Disk-latency numbers on this host are ambient-sensitive: fsync p50
+  varied 1.6-5.6 ms between runs (shared machine). For A-vs-B latency
+  claims, measure both sides IN THE SAME RUN and say so.
 
 - GOTOOLCHAIN: plain "go build/test" fails with a version error. Symptom:
   "go.mod requires go >= 1.26.5". Fix: prefix with GOTOOLCHAIN=auto (or

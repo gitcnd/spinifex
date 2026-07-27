@@ -61,18 +61,39 @@ that must meet them -- never after the implementation.
       acked by the same process lifetime; the first parser version ignored
       session boundaries and falsely accused viperblock (harness bug,
       fixed, documented in the parser).
-- [ ] P-1.4 WAL-replication prototype (fork F2, options b and c) measured:
+- [x] P-1.4 WAL-replication prototype (fork F2, options b and c) measured:
       synthetic replication of WAL records to (b) a peer process over the
       network and (c) Predastore small-object PUTs; report added write
       latency (p50/p99) and sustained IOPS versus the P-1.5 baseline.
       Oracle: fio numbers, same rig both sides.
-- [ ] P-1.5 Performance baseline frozen, SPLIT BY LAYER (feeds fork F7):
+      -> artifact: viperblock branch feat/replicated-wal-durability
+      commit f7d5ca1, proto/f2walrepl/ + results/
+      2026-07-27_f2_durability_latency.txt (2026-07-27): same-run 4 KiB
+      acked p50: local fsync 5627 us, peer-replicated 5630 us (+3 us --
+      replication free relative to fsync; localhost caveat recorded),
+      predastore per-write PUT 77643 us @c1 / 293463 us @c16 (rejected).
+      F2 moved OPEN -> LEANING (b); human ack pending (MAJOR).
+      Note: oracle is the prototype's own timers (fio does not apply to
+      a userspace replication path); tolerances not applicable -- this
+      gate produces the decision evidence, and did.
+- [~] P-1.5 Performance baseline frozen, SPLIT BY LAYER (feeds fork F7):
       (i) viperblock engine-level (direct WriteAt/ReadAt bench) and
       (ii) full NBD path (fio in the dev deployment through
       qemu -> nbdkit -> viperblock): 4k randwrite/randread + 128k seq;
       IOPS, p50/p99 latency, throughput to a frozen CSV. The (ii)-(i)
       delta quantifies the nbdkit/NBD tax the human flagged. Oracle: fio
       + the engine bench, same host, same volume config.
+      -> (i) DONE: viperblock branch feat/crash-consistency-harness
+      commit 19adcf3, tests/perfbench/ + results/2026-07-27_engine_
+      baseline_xfs_ssd.csv (1 GiB volume, xfs SSD, 10 s phases):
+      randwrite-4k p50 5 us (memory ack) but MAX 175-420 s -- writes
+      stall for minutes behind synchronous drains under sustained load
+      (guest-visible freeze; new Phase 1 concern alongside durability);
+      flush barrier p50 8.9 ms / p99 100 ms at 4 MiB dirty; randread-4k
+      6.1k IOPS @1 / 92.6k @16 (p50 ~160 us); seqwrite-128k 117 MB/s.
+      REMAINING (the only remaining content of this box): (ii) the NBD
+      path -- needs nbdkit (build or rpm-extract without root) or lands
+      with the F7 candidate prototypes (P-1.9) which need the same rig.
 - [~] P-1.6 Predastore failure/repair baseline: 3-node dev cluster; kill
       one node under load; measure (a) object availability during outage
       (RS reconstruction works: target 100% of readable objects), (b) what
