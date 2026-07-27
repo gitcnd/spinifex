@@ -81,9 +81,18 @@ else
   run_suite predastore-unit 900 env -C "$PREDASTORE_DIR" go test -count=1 ./...
 fi
 
-# crashharness-smoke: 2 SIGKILL cycles through the public API.
+# crashharness-smoke: 2 SIGKILL cycles through the public API. The harness
+# lives on the feat/crash-consistency-harness branch; use a dedicated
+# worktree so this suite does not depend on whichever branch the main
+# viperblock clone has checked out (bit 2026-07-27: instant FAIL when the
+# clone sat on the vhost-user branch).
+CRASHHARNESS_WORKTREE="$VIPERBLOCK_DIR-crashharness-worktree"
+if [ ! -d "$CRASHHARNESS_WORKTREE" ]; then
+  git -C "$VIPERBLOCK_DIR" worktree add "$CRASHHARNESS_WORKTREE" \
+    feat/crash-consistency-harness > /dev/null 2>&1
+fi
 started=$SECONDS
-if (cd "$VIPERBLOCK_DIR" && go build -o /tmp/regress-crashharness ./tests/crashharness/cmd/crashharness \
+if (cd "$CRASHHARNESS_WORKTREE" && go build -o /tmp/regress-crashharness ./tests/crashharness/cmd/crashharness \
     && rm -rf /tmp/regress-ch && timeout 300 /tmp/regress-crashharness run \
        --dir /tmp/regress-ch --cycles 2 --min-run 1s --max-run 2s \
     | grep -q "ALL CRASHHARNESS CHECKS PASS") > /tmp/regress-crashharness.log 2>&1; then
