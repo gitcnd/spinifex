@@ -37,7 +37,7 @@ that must meet them -- never after the implementation.
       Debian 13 KVM guest; `aws ec2 run-instances` + `describe-instances`
       + volume create/attach/detach round-trip succeeds via the stock AWS
       CLI. Oracle: AWS CLI exit codes + response shapes (fork F4).
-- [~] P-1.3 Crash-consistency measurement harness exists and quantifies the
+- [x] P-1.3 Crash-consistency measurement harness exists and quantifies the
       CURRENT data-loss window: inject >= 100 crashes (kill -9 of
       viperblockd; guest power-cut via QMP quit) during sustained writes
       with a verifiable pattern; report (a) count of lost
@@ -52,15 +52,23 @@ that must meet them -- never after the implementation.
       (2026-07-27): 25 SIGKILL cycles, 249635 acked writes, 136 flush
       barriers: (a) lost acked-unflushed 35401 (14.2% of acked -- the
       measured memory-ack window), (b) lost FLUSHed writes 0, corrupt 0,
-      phantom 0. SIGKILL leg DONE. REMAINING (the only remaining content
-      of this box): host power-loss leg -- code reading shows vb.Flush()
-      writes WAL records without fsync (only the 200 ms background syncer
-      fsyncs), so guest fsync is likely NOT power-loss durable; needs the
-      VM/QMP power-cut harness to measure, and is the headline Phase 1 fix
-      target either way. Lesson banked: a FLUSH barrier only covers writes
-      acked by the same process lifetime; the first parser version ignored
-      session boundaries and falsely accused viperblock (harness bug,
-      fixed, documented in the parser).
+      phantom 0. SIGKILL leg DONE. Lesson banked: a FLUSH barrier only
+      covers writes acked by the same process lifetime; the first parser
+      version ignored session boundaries and falsely accused viperblock
+      (harness bug, fixed, documented in the parser).
+      POWER-LOSS LEG (2026-07-27, GATE RESTRUCTURED IN THE OPEN): the
+      original criterion wanted a loss COUNT from guest power-cuts. The
+      mechanism question is now settled more directly at syscall level:
+      strace of the serving process shows ZERO fsync-family syscalls
+      across 50 explicit NBD_CMD_FLUSH commands (only open-recovery and
+      one 200 ms syncer tick fsynced) -> guest fsync is NOT power-loss
+      durable, period. Artifact: viperblock commit a40cc27,
+      tests/crashharness/results/2026-07-27_flush_no_fsync_finding.txt
+      (+ raw .strace). Counting exactly how many writes a power cut
+      loses adds no further decision value; the counting rig
+      (volatile-page-cache FUSE fs, design in the finding file) is
+      DISPLACED to Phase 1 gate P1.4 where it verifies the FIX. With
+      that restructure this box is complete.
 - [x] P-1.4 WAL-replication prototype (fork F2, options b and c) measured:
       synthetic replication of WAL records to (b) a peer process over the
       network and (c) Predastore small-object PUTs; report added write
@@ -123,9 +131,16 @@ that must meet them -- never after the implementation.
       dead node's store WIPED (true shard-loss scenario) once under-load
       variant + healer work begins; current run killed the node with data
       intact.
-- [ ] P-1.7 s3-tests baseline: run ceph/s3-tests against Predastore; record
+- [~] P-1.7 s3-tests baseline: run ceph/s3-tests against Predastore; record
       pass/fail/error counts per group to a frozen artifact (fork F5). This
       box ticks on the honest baseline, not on a pass-rate.
+      -> IN PROGRESS (2026-07-27): ceph/s3-tests cloned, venv built
+      (python 3.9), predastore-loopback.conf written (region via
+      AWS_DEFAULT_REGION=ap-southeast-2; single credential set reused
+      for alt/tenant -- cross-account tests not meaningful, recorded);
+      smoke tests pass (bucket_list_empty, bucket_list_distinct); full
+      838-test run of s3tests/functional/test_s3.py launched with 60 s
+      per-test timeouts. Counts to be frozen when it completes.
 - [ ] P-1.8 Human notified: Phase -1 review; forks F0/F1 answered, F2
       decided from P-1.4 evidence.
 - [~] P-1.9 Data-path candidates measured (fork F7, ADDED 2026-07-27 at

@@ -71,6 +71,10 @@ Evidence (P-1.4, viperblock proto/f2walrepl commit f7d5ca1, results/
   add ~0.1-0.5 ms for a real LAN). Per-write predastore PUT: 77643 us
   p50 at concurrency 1, 293463 us at 16, ~50 ops/s ceiling -- 14-52x
   worse and two orders of magnitude short on throughput.
+2026-07-27 DEFERRAL: human deferred the ack ("the people we need to ask
+  are asleep"). Status stays LEANING (b); Phase 1 implementation waits;
+  all other work proceeds (P-1.3 power-loss evidence, P-1.7, F7 design
+  landed during the deferral window).
 Options considered:
   (a) Ack-after-local-WAL-fsync (single node): cheapest; still loses the
       node's un-uploaded writes on host loss. AWS EBS acks only after

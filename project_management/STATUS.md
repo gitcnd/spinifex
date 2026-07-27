@@ -2,16 +2,16 @@
 
 <!-- Overwrite-in-place. History lives in JOURNAL.md. -->
 
-Last updated: 2026-07-27 12:00 (P-1.9 candidate (a) measured: a native
-Go NBD server is ON PAR with nbdkit -- the tax is the NBD round trip,
-not the nbdkit process; vhost-user-blk confirmed as the endgame)
-Current phase: Phase -1 (de-risk and baseline), 3/9 [x], 3/9 [~]
-Current slice: Go NBD server prototype (viperblock branch
-feat/data-path-native-nbd-server, commit 7a501af): write d1 16.1k IOPS
-vs nbdkit 15.2k (+6%), write d16 -17%, reads -10%. Dropping nbdkit is
-operationally useful (no C shim/packaging gap/extra process) but not a
-performance fix. Remaining for F7: a vhost-user-blk prototype
-(multi-session build).
+Last updated: 2026-07-27 12:55 (F2 deferred by human; P-1.3 CLOSED --
+strace proves guest FLUSH never fsyncs; s3-tests baseline running;
+F7 vhost-user-blk design note written)
+Current phase: Phase -1 (de-risk and baseline), 4/9 [x], 3/9 [~]
+Current slice: power-loss mechanism proven at syscall level (zero
+fsyncs across 50 explicit NBD FLUSHes; viperblock commit a40cc27) --
+P-1.3 closed via open gate restructure, loss-counting rig displaced to
+P1.4 (fix verification). s3-tests 838-test baseline running in
+background. F7 design decided on paper: pure-Go vhost-user-blk in
+viperblockd, amd64-first (F7_VHOST_USER_BLK_DESIGN_NOTE.md).
 
 ## NEEDS HUMAN
 

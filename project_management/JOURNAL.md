@@ -70,6 +70,45 @@ F5 opened (LEANING ceph/s3-tests).
 Next: get human answers on F0/F1 and the NEEDS HUMAN resource items; then
 Phase -1 starting with P-1.1 (baseline unit+integration on this machine).
 
+## 2026-07-27 12:50 -- F2 DEFERRED BY HUMAN; POWER-LOSS MECHANISM PROVEN
+##                     BY STRACE; S3-TESTS BASELINE LAUNCHED; F7 DESIGN
+##                     NOTE WRITTEN
+Plan: human deferred the F2 ack ("people asleep") and asked for maximal
+independent progress. Frontier chosen: P-1.3 power-loss leg, P-1.7
+s3-tests, F7 design note.
+Done:
+- P-1.3 power-loss leg CLOSED by open gate restructure: instead of a
+  VM power-cut loss count, proved the mechanism at syscall level --
+  strace on the NBD-serving process recorded ZERO fsync-family syscalls
+  across 50 explicit NBD_CMD_FLUSH commands (only open-recovery fsyncs
+  and one 200 ms background-syncer tick). Guest fsync is NOT power-loss
+  durable. Artifact: viperblock commit a40cc27 (finding + raw strace).
+  The loss-COUNTING rig (volatile-page-cache FUSE fs) is displaced to
+  P1.4 where it will verify the fix. P-1.3 now [x].
+- P-1.7 launched: ceph/s3-tests cloned, venv (py3.9) built,
+  predastore-loopback.conf written; discovered the suite takes region
+  from AWS_DEFAULT_REGION (not the conf) -- set to ap-southeast-2;
+  smoke tests green; full 838-test run started in background with 60 s
+  per-test timeouts. Caveat recorded: single credential set reused for
+  alt/tenant, so cross-account tests are not meaningful in this
+  baseline.
+- F7 design note written (project_management/
+  F7_VHOST_USER_BLK_DESIGN_NOTE.md): pure-Go vhost-user-blk backend in
+  viperblockd, amd64-first, single-queue thin slice; Rust sidecar and
+  cgo libvhost-user rejected (both reintroduce a per-op boundary);
+  control-plane-only libvhost-user recorded as escalation; bench needs
+  an in-guest fio rig (shared with P-1.2/P1.4 needs).
+Failed/learned:
+- qemu-io is a fine explicit-FLUSH NBD client for barrier experiments
+  (qemu-img bench cannot issue flushes).
+- s3-tests current tree keeps tests under s3tests/functional (not the
+  older s3tests_boto3 path).
+Metrics: strace experiment ~10 min end to end; s3-tests setup ~2 min.
+Fork movement: F2 explicitly DEFERRED by the human (stays LEANING (b),
+Phase 1 implementation blocked on ack); F7 unchanged (design note only).
+Next: freeze the s3-tests counts when the run completes; then the
+in-guest rig (serves P-1.2, P-1.9 bench, and P1.4 verification).
+
 ## 2026-07-27 11:55 -- P-1.9 CANDIDATE (a): GO NBD SERVER ON PAR WITH
 ##                     NBDKIT -- THE TAX IS THE PROTOCOL, NOT THE PROCESS
 Plan: prototype fork-F7 candidate (a), a native Go NBD server around the
