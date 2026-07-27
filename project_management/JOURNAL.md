@@ -70,6 +70,42 @@ F5 opened (LEANING ceph/s3-tests).
 Next: get human answers on F0/F1 and the NEEDS HUMAN resource items; then
 Phase -1 starting with P-1.1 (baseline unit+integration on this machine).
 
+## 2026-07-27 14:45 -- IN-GUEST RIG LIVE; NBD LIFECYCLE RACE FIXED
+##                     (VERIFICATION QUEUED BEHIND THE BUSY CLUSTER)
+Plan: work that neither blocks on nor disturbs the running s3-tests.
+Done:
+- s3-tests completion watcher armed as a tracked background task (the
+  run itself was detached, so no automatic notification would have
+  fired -- trap noted). Human does not need to ping.
+- In-guest rig COMPLETE as substrate: Debian 13 guest (kernel 6.12,
+  ublk-capable) boots under /usr/libexec/qemu-kvm with KVM accel, no
+  root: cloud-init NoCloud seed with SSH key, user networking
+  (hostfwd 2222->22), passwordless sudo, fio 3.39 + nbd-client
+  provisioned, clean poweroff; provisioned overlay kept at
+  ../vm-images/rig-node1.qcow2 for instant reuse. No /dev/kvm inside
+  guest (add -cpu host when nesting is needed). Serves P-1.2, the
+  F7/P-1.9 in-guest bench, and P1.4 verification.
+- NBD lifecycle race ROOT-CAUSED and FIXED (viperblock branch
+  fix/nbd-close-open-race, commit 6a871d2, pushed): the plugin's Close
+  ends in vb.Close() which REMOVES the volume's local tree; nbdkit can
+  run the next connection's Open while the previous Close is
+  mid-teardown (CanMultiConn=false bounds connections, not callback
+  overlap), so the new connection's WALs/checkpoints get deleted under
+  it -- the exact ENOENT seen during the P-1.5 bench, and a silent
+  durability hazard (unlinked-but-open WAL). Fix: a lifecycle mutex
+  ordering Open after any in-flight Close/Unload. Repro script
+  committed (tests/nbd-race/nbd-race-repro.sh).
+  HONESTY NOTE: verification is PENDING -- the repro needs the
+  predastore cluster, which is serving the s3-tests baseline; run the
+  pre/post-fix counts when it frees. The commit message says so.
+Failed/learned:
+- Detached (shell-&) background jobs produce NO completion
+  notification; use tracked tasks or arm a watcher. Banked.
+Metrics: VM first boot to SSH ~100 s; apt provision ~150 s.
+Fork movement: none.
+Next: when s3-tests completes -- freeze counts (P-1.7), verify the race
+fix pre/post; then vhost-user-blk skeleton per the design note.
+
 ## 2026-07-27 13:40 -- P-1.7: STOCK S3-TESTS CANNOT EVEN CLEAN UP AFTER
 ##                     ITSELF AGAINST PREDASTORE (BASELINE FINDING #1)
 Plan: get a meaningful per-test s3-tests baseline.

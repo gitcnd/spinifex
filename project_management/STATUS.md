@@ -2,17 +2,16 @@
 
 <!-- Overwrite-in-place. History lives in JOURNAL.md. -->
 
-Last updated: 2026-07-27 13:45 (F2 deferral window used well: P-1.3
-closed by strace proof; s3-tests unblocked after an 836-error cascade
-root-cause; run v2 in flight; F7 design note done; Debian 13 image
-downloading for the in-guest rig)
+Last updated: 2026-07-27 14:50 (in-guest rig live and reusable; NBD
+lifecycle race root-caused + fixed pending verification; s3-tests
+completion watcher armed -- no human ping needed)
 Current phase: Phase -1 (de-risk and baseline), 4/9 [x], 3/9 [~]
-Current slice: s3-tests baseline finding #1 -- the stock suite cannot
-even clean up after itself against predastore (needs ListObjectVersions
-+ DeleteObjects, both known P2.3 gaps; ListObjectVersions answered with
-an EMPTY 200 which silently defeats error-triggered fallbacks). Fixed
-with a cleanup-glue-only patch, rig committed reproducibly (predastore
-tools/s3tests/, commit 8888530). Full 838-test run v2 in background.
+Current slice: Debian 13 rig VM (kernel 6.12) boots no-root under
+qemu-kvm with SSH + fio provisioned; overlay kept for instant reuse
+(../vm-images/). NBD close/open lifecycle race fixed with a mutex
+(viperblock fix/nbd-close-open-race commit 6a871d2) -- verification
+queued behind the cluster (busy with the 838-test s3-tests baseline,
+still running under a tracked watcher).
 
 ## NEEDS HUMAN
 
@@ -87,16 +86,16 @@ Nothing blocking. Non-blocking queue:
 - Research, machine audit, phased plan, fork registry. JOURNAL entry 1.
 
 ## Next action
-1. Freeze the s3-tests v2 counts when the background run completes
-   (ticks P-1.7); commit the results file to predastore tools/s3tests/.
-2. In-guest rig (image downloading at ../vm-images): cloud-init NoCloud
-   seed ISO (genisoimage present), boot Debian 13 under
-   /usr/libexec/qemu-kvm with user networking; this rig serves P-1.2
-   (dev deployment), the F7/P-1.9 in-guest fio bench, and P1.4's future
-   fix verification.
-3. F7 vhost-user-blk implementation start per
-   F7_VHOST_USER_BLK_DESIGN_NOTE.md (pure Go, single queue) -- gated
-   behind the in-guest rig existing to bench it.
+1. When the s3-tests watcher fires: freeze v2 counts (ticks P-1.7,
+   commit results to predastore tools/s3tests/), THEN verify the NBD
+   race fix pre/post with tests/nbd-race/nbd-race-repro.sh on the freed
+   cluster, and stop the cluster.
+2. F7 vhost-user-blk implementation start per
+   F7_VHOST_USER_BLK_DESIGN_NOTE.md (pure Go, single queue); the rig VM
+   at ../vm-images/rig-node1.qcow2 (SSH key rig_ssh_key, port 2222) is
+   ready to bench it. Add -cpu host if the guest ever needs /dev/kvm.
+3. P0.2 groundwork: one-command regression runner tying spinifex unit +
+   integration, viperblock, predastore, crashharness smoke together.
 4. P2.3 note for Phase 2: make predastore answer ListObjectVersions
    with NotImplemented (or a real unversioned shape) instead of an
    empty 200 -- the empty 200 silently defeats client fallbacks.
