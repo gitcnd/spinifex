@@ -70,6 +70,40 @@ F5 opened (LEANING ceph/s3-tests).
 Next: get human answers on F0/F1 and the NEEDS HUMAN resource items; then
 Phase -1 starting with P-1.1 (baseline unit+integration on this machine).
 
+## 2026-07-27 07:50 -- STORAGE REPOS PUSHED; DNS FIX VERIFIED; ONE
+##                     ATTRIBUTION CORRECTED
+Plan: use the human's DNS fix + widened token; push storage branches.
+Done:
+- Human fixed the wildcard DNS (verified: NXDOMAIN behaves) and granted
+  the token read+write on gitcnd/{spinifex,viperblock,predastore}.
+- Fork API remains impossible for ANY fine-grained token here (the source
+  repos are mulgadc-owned; "Resource not accessible by personal access
+  token"). Created PLAIN repos gitcnd/viperblock + gitcnd/predastore via
+  POST /user/repos instead and pushed: main, both feature branches each,
+  and tag v1.13.0. All storage work is now off-machine. Plain repos
+  cannot PR against mulgadc/*; swap to true forks later if upstreaming
+  (noted in STATUS).
+- DNS-fix retest of the two normal-mode unit failures:
+  services/viperblockd PASSES now (2.7 s; DNS attribution CONFIRMED).
+  spinifex/daemon TestClusterManager_TLSServesHTTPS still FAILS 3/3.
+Failed/learned (attribution correction, per the honesty rule):
+- My P-1.1 note claimed both failures were "caused by the machine's
+  wildcard-DNS trap". WRONG for spinifex/daemon; corrected in the gate
+  note. Investigation so far: standalone replica (TLS 1.3, the pinned PQ
+  curve list X25519MLKEM768/SecP384r1MLKEM1024/X25519/P-384, ECDSA P-256
+  cert, dangling plain-TCP conn like the test) handshakes in 2 ms on this
+  host, so loopback TLS itself is fine; the 2 s stall is specific to the
+  daemon test binary (its TestMain pins SPINIFEX_HOST_VCPU=4 and starts a
+  shared NATS fixture). Passes in hermetic netns. Parked as an open
+  non-blocking triage item (spiral rule) -- P-1.1's mode-union gate
+  evidence still stands.
+- Trap: `go mod init` in a scratch dir writes the SYSTEM go version
+  (1.21) into go.mod, so newer TLS constants are undefined until
+  `go mod edit -go=1.26.5`.
+Metrics: pushes ~10 s; retests ~45 s.
+Fork movement: none.
+Next: P-1.4 WAL-replication prototype (F2 evidence).
+
 ## 2026-07-27 06:35 -- P-1.6 PREDASTORE SINGLE-NODE-KILL BASELINE:
 ##                     READS SURVIVE (2320x SLOWER), WRITES GO TO ZERO
 Plan: stand up the 3-node predastore dev cluster on this host and measure

@@ -20,14 +20,22 @@ Nothing blocking. Non-blocking queue:
 1. REVIEW: F0/F1 closed by your delegation (DECISIONS.md) -- Outposts
    parity = service-set first then thin outposts.* API; "predastore as
    EBS" = harden the whole Viperblock+Predastore stack. Object if wrong.
-2. Fork mulgadc/viperblock and mulgadc/predastore to your account and add
-   them to the token's scope, so the storage branches (which now carry
-   real work) can be pushed. Until then they are local-only at
-   ../viperblock and ../predastore.
-3. FYI, a machine quirk you may want to fix globally: the resolver's
-   emsvr.com search domain wildcard-resolves EVERY nonexistent hostname to
-   91.103.1.84. It broke two test packages (triaged; hermetic-netns
-   workaround in ENVIRONMENT.md).
+2. RESOLVED 2026-07-27 07:45: human granted the token read+write on
+   gitcnd/{spinifex,viperblock,predastore}; all storage branches + the
+   v1.13.0 tag pushed to gitcnd/viperblock and gitcnd/predastore.
+   NOTE (standing, low priority): these are PLAIN repos, not GitHub
+   forks, so they cannot open PRs against mulgadc/* directly. If
+   upstreaming becomes the goal: delete them, click Fork on the mulgadc
+   repos, re-add to token, and I re-push (identical history, 2 minutes).
+3. RESOLVED 2026-07-27: the wildcard-DNS quirk was fixed by the human;
+   verified (nonexistent hostnames now NXDOMAIN). services/viperblockd
+   now passes normally, CONFIRMING its DNS attribution. However
+   spinifex/daemon TestClusterManager_TLSServesHTTPS STILL fails on the
+   host (3/3) -- my original DNS attribution for that one was WRONG
+   (corrected in the P-1.1 gate note). Cause unknown; standalone TLS
+   replica is 2 ms, test passes in netns. Open triage item (non-blocking;
+   suspect the daemon TestMain fixtures' interaction with the host
+   network). May be an upstream-reportable flake once root-caused.
 4. Root access still only needed later for bridged VM networking.
 5. RAM budget assumption stands: VMs capped at 16 GiB.
 6. NVMe pair: destructive use permitted? Needed by the perf phases.

@@ -16,12 +16,21 @@ that must meet them -- never after the implementation.
       failure environment-attributed (artifacts /tmp/p11_unit_summary.txt,
       /tmp/p11_hermetic_summary.txt; triage in JOURNAL entry 3):
       normal mode = 2 package failures (daemon, services/viperblockd),
-      both caused by the machine's wildcard-DNS trap (fake host
-      s3.mock.local resolves to a real server; both packages PASS under
-      `unshare -r -n` hermetic netns). Hermetic mode = 3 package failures
-      (admin, gpu, utils) needing real interfaces/full userns perms; all
-      three PASS in normal mode. ~66 s normal / ~37 s hermetic on this
-      host.
+      both PASS under `unshare -r -n` hermetic netns. Hermetic mode = 3
+      package failures (admin, gpu, utils) needing real interfaces/full
+      userns perms; all three PASS in normal mode. ~66 s normal / ~37 s
+      hermetic on this host.
+      CORRECTION (2026-07-27, after the human fixed the wildcard DNS):
+      the original note attributed BOTH normal-mode failures to the
+      wildcard-DNS trap. Post-fix retest: services/viperblockd now PASSES
+      normally (DNS attribution CONFIRMED); spinifex/daemon
+      TestClusterManager_TLSServesHTTPS still FAILS 3/3 (DNS attribution
+      REFUTED -- cause unknown). Standalone replica (same TLS 1.3 + PQ
+      curve prefs + ECDSA P-256 cert + dangling plain-TCP conn) completes
+      in 2 ms on this host, so plain loopback TLS is fine; the stall is
+      specific to the daemon test process (TestMain runs a shared NATS
+      fixture + SPINIFEX_HOST_VCPU=4). Still environment-sensitive
+      (passes in netns), still triaged-not-blocking; open item in STATUS.
       -> integration leg (2026-07-27): `make test-integration` ok,
       tests/integration 12.178 s, zero failures (GOWORK=off).
 - [ ] P-1.2 Working dev deployment exists: single-node Spinifex inside a
