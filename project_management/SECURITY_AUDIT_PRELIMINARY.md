@@ -16,10 +16,17 @@ Reviewed at:
 - viperblock: /home/devnull/Downloads/github/viperblock (v1.13.0 + local branches)
 - predastore: /home/devnull/Downloads/github/predastore (v1.13.0 + local branches)
 
-IMPORTANT CAVEAT: findings are from static reading and have NOT been
-reproduced at runtime. Each needs confirmation (a focused test or a
-controlled local repro) before and after any fix. Treat severities as
-provisional. Note where a subsequent look finds a compensating control.
+IMPORTANT CAVEAT: most findings are from static reading and have NOT been
+reproduced at runtime. Each unconfirmed item needs confirmation (a focused
+test or a controlled local repro) before and after any fix. Treat those
+severities as provisional.
+
+RUNTIME-CONFIRMED SO FAR (2026-07-27, isolated reproducers under
+project_management/security_repros/, file-backend/in-memory only -- no
+cluster touched): SP-2 (IAM Condition dropped -> over-grant), VB-1 (Close
+deletes flushed WAL after a failed chunk upload -> data loss, CRITICAL),
+VB-4 (S3 SecretKey + AccessKey rendered into logs). Details on each
+finding below under "RUNTIME".
 
 Source review agents (for the deeper-dive agent to resume with more
 context): spinifex [security review](3c14e554-196b-473b-8b63-74cd82c25b3b),
@@ -95,6 +102,12 @@ authorization and in operational surfaces.
   `Condition` (and `NotAction`/`NotResource`) at write time, so intent is
   never silently discarded. Note trust policies already reject unsupported
   conditions at write time (`roles.go` ~698-718) -- mirror that.
+- RUNTIME CONFIRMED (2026-07-27): `security_repros/sp2_condition`. An
+  `Allow` for `ec2:StopInstances` gated by
+  `Condition {Bool: aws:MultiFactorAuthPresent=true}` unmarshals with the
+  Condition dropped ("policy as retained ... Statement without Condition")
+  and `iampolicy.Evaluate("ec2:StopInstances","*",...)` returns Allow (1)
+  with no MFA context -- the gated permission applies unconditionally.
 
 ### SP-3 -- `sts:ExternalId` confused-deputy protection is accepted but not enforced  [MEDIUM]
 - Where: `spinifex/handlers/sts/assume_role.go` (external id only logged,
@@ -237,10 +250,19 @@ usual wire/parameter validation and secret-in-log items.
   loss). NBD Close/Unload call DrainToBackend then Close on the same path.
 - Direction: fail closed -- never `RemoveLocalFiles` when any drain/chunk/
   checkpoint step failed; keep local WAL + checkpoints until chunks and the
-  live checkpoint have all succeeded. Confirm with a fault-injection test
-  (backend PUT fails during Close -> local WAL retained -> next open
-  recovers). Coordinate with the reconnect-lifecycle fix already on
-  `fix/nbd-close-open-race`.
+  live checkpoint have all succeeded. Coordinate with the reconnect-
+  lifecycle fix already on `fix/nbd-close-open-race`.
+- RUNTIME CONFIRMED (2026-07-27, CRITICAL): `security_repros/
+  vb1_close_dataloss` (file backend, backend wrapper failing only
+  FileTypeChunk writes). Sequence: WriteAt block 42 + Flush ->
+  "pre-close read of block 42: present"; Close -> chunk upload fails,
+  SaveState/SaveBlockState (config + checkpoint writes) succeed, so the
+  fail-open branch runs `RemoveLocalFiles` -> "local WAL files remaining
+  after Close: 0"; Close returns the injected error. Reopen through the
+  normal recovery path -> "post-reopen read of block 42: ZERO BLOCK".
+  A block acknowledged AND flushed was permanently lost. The fix (skip
+  RemoveLocalFiles on any drain failure) is verifiable by re-running this
+  repro and expecting "still present".
 
 ### VB-2 -- Volume names are not sanitized before path/key construction  [HIGH]
 - Where: `types/types.go` ~69-72; `viperblock/backends/file/file.go`
@@ -271,6 +293,13 @@ usual wire/parameter validation and secret-in-log items.
   if configured).
 - Direction: log only non-secret fields; add a redacting `LogValue()` to
   `S3Config` so the secret cannot be logged by accident anywhere.
+- RUNTIME CONFIRMED (2026-07-27): `security_repros/vb4_secret_log` renders
+  the exact slog call shape and the JSON log line contains
+  `"SecretKey":"TOP-secret-..."` AND `"AccessKey":"AKIA..."` (both
+  exposed). Side note for the fix author: the struct is passed as a
+  dangling arg, so it also logs under `"!BADKEY"` and shows
+  `VolumeSize:0` -- a `LogValue()` on S3Config fixes the leak and the
+  key-shape bug together.
 
 ### VB-5 -- `ReadWAL` allocates from an unvalidated on-disk length  [MEDIUM]
 - Where: `viperblock/viperblock.go` ~2193-2197 -- `block.Len` read from the
@@ -541,5 +570,8 @@ Confirm-then-fix each; write the repro before the fix.
 12. Deeper-review items (SP-D*, VB-D*, PD-D*): investigate and either
     downgrade with evidence or promote to a fix.
 
-Every item above is provisional pending runtime confirmation. None has
-been reproduced or fixed in this pass.
+Runtime status (2026-07-27): SP-2, VB-1, and VB-4 are now RUNTIME
+CONFIRMED with re-runnable reproducers in
+project_management/security_repros/ (VB-1 is the critical data-loss one).
+The remaining items are still static-only and should each get a
+reproducer before a fix. Nothing has been fixed in this pass.

@@ -70,6 +70,42 @@ F5 opened (LEANING ceph/s3-tests).
 Next: get human answers on F0/F1 and the NEEDS HUMAN resource items; then
 Phase -1 starting with P-1.1 (baseline unit+integration on this machine).
 
+## 2026-07-27 14:30 -- SECURITY AUDIT: RUNTIME CONFIRMATION OF 3 FINDINGS
+Plan: (forked chat) deeper runtime checks on the preliminary audit
+findings WITHOUT disturbing the running s3-tests / shared cluster.
+Status check first: s3-tests run had already ENDED (no live pytest
+proc; exit 1) but NOT cleanly -- it hung in an SSL read on one test and
+produced no pass/fail summary, so P-1.7 still needs a clean rerun (other
+thread's task). The completion watcher I armed earlier is BROKEN: its
+own command line matches its `pgrep -f "pytest s3tests/functional"`
+pattern, so it self-matches and will never fire (the other thread's
+await will hang). Flagged to the human; did not kill it (other thread
+depends on it). 3-node predastore cluster still up; left untouched.
+Done (isolated reproducers, file-backend/in-memory, no ports, no
+cluster -- project_management/security_repros/, go.mod replace -> local
+clones):
+- SP-2 CONFIRMED: an Allow gated by Condition{MFA} unmarshals with the
+  Condition dropped; Evaluate returns Allow (1) with no MFA context.
+  Over-grant is real, not just theoretical.
+- VB-1 CONFIRMED (CRITICAL, data loss): backend wrapper fails only
+  FileTypeChunk writes; WriteAt+Flush a block (present pre-close), Close
+  fails the chunk upload but SaveState/SaveBlockState succeed so
+  RemoveLocalFiles runs (0 WAL files left), reopen reads ZERO BLOCK.
+  A flushed, acknowledged write was permanently lost.
+- VB-4 CONFIRMED: the nbd plugin's slog call renders SecretKey AND
+  AccessKey verbatim into the JSON log (also under !BADKEY, VolumeSize:0
+  -- a LogValue() fixes both).
+- Updated SECURITY_AUDIT_PRELIMINARY.md with RUNTIME lines + status;
+  committed the reproducers with a README (replace-path caveat noted).
+Failed/learned:
+- pgrep watcher patterns must not appear in the watcher's own command
+  line (self-match). Same family as the earlier pkill-self trap. Use a
+  sentinel file or match the python binary, not the pytest arg string.
+Metrics: three go-run reproducers ~10s each after first compile.
+Fork movement: none (audit only).
+Next (remediation agent, not this chat): reproducers exist for SP-2 /
+VB-1 / VB-4 -- fix + re-run to green; build reproducers for the rest.
+
 ## 2026-07-27 13:55 -- PRELIMINARY SECURITY HARDENING REVIEW (READ-ONLY)
 Plan: (forked chat, this branch only) human asked for a read-only
 preliminary security audit across the three repos, documented as a
