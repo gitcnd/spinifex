@@ -70,6 +70,110 @@ F5 opened (LEANING ceph/s3-tests).
 Next: get human answers on F0/F1 and the NEEDS HUMAN resource items; then
 Phase -1 starting with P-1.1 (baseline unit+integration on this machine).
 
+## 2026-07-27 05:45 -- P-1.1 UNIT BASELINE TRIAGED GREEN (two-mode union)
+Plan: run the spinifex unit suite and triage failures (gate P-1.1).
+Done:
+- Normal mode (`GOWORK=off GOTOOLCHAIN=auto make test`, ~66 s): 2 package
+  failures -- spinifex/daemon (TestClusterManager_TLSServesHTTPS) and
+  services/viperblockd (TestEBSConfigQueueGroup_DetachedOpenFails).
+- Root cause (measured, not assumed): the machine's resolver has an
+  emsvr.com search domain with a WILDCARD A record; every nonexistent
+  hostname resolves to 91.103.1.84 running a live HTTPS server. Fake test
+  hosts (https://s3.mock.local) therefore produce slow TLS failures
+  instead of instant DNS errors -> retries -> NATS timeouts. Verified:
+  getent hosts s3.mock.local -> 91.103.1.84 (s3.mock.local.emsvr.com).
+- Fix/workaround: hermetic netns (`unshare -r -n` + `ip link set lo up`).
+  Both failing packages PASS hermetically. Full hermetic run (~37 s): 96
+  ok, 3 different failures (admin TestDiscoverLocalIPs, gpu vfio tests,
+  utils TestExtractDiskImageFromFile) -- all three need real interfaces or
+  full userns permissions and PASS in normal mode.
+- Conclusion: every package passes in at least one mode; every failure has
+  a written environment attribution. Unit leg of P-1.1 marked done inside
+  the [~]; integration tier launched, result to be journaled.
+Failed/learned: wildcard DNS is a project-wide trap (banked in
+  ENVIRONMENT.md with the netns recipe).
+Metrics: unit suite 66 s normal / 37 s hermetic, 72-thread host.
+Fork movement: none.
+Next: integration triage, then fio baseline (P-1.5).
+ADDENDUM 05:50: `make test-integration` ok (tests/integration 12.178 s,
+zero failures) -> P-1.1 ticked [x].
+
+## 2026-07-27 05:40 -- P-1.3 SIGKILL LEG COMPLETE; HARNESS FALSE-ACCUSATION
+##                     INVESTIGATED AND FIXED
+Plan: build the crash-consistency harness (gate P-1.3) on viperblock
+branch feat/crash-consistency-harness and get an honest first number.
+Done:
+- Harness: tests/crashharness/ in the viperblock clone. Component-test
+  discipline: drives viperblock ONLY through its public API (WriteAt /
+  Flush / the production NBD-plugin open sequence: New -> Backend.Init ->
+  LoadState -> EnsureVolumeUUID -> LoadLiveCheckpoint -> RecoverLocalWALs
+  -> OpenWAL x2). Self-describing 4 KiB block patterns (magic + block +
+  generation + CRC32), an acknowledged-write log with SESSION/W/FLUSH
+  records, a controller that SIGKILLs the writer at random points, and a
+  verifier that reopens through recovery and classifies every logged
+  block. Verification runs on a COPY of the state so it cannot disturb
+  the volume under test.
+- RESULT (25 cycles, commit 40b9ef8, report tests/crashharness/results/
+  2026-07-27_sigkill_25cycle_report.txt): 249635 acked writes, 136 flush
+  barriers, 0 acknowledged-and-FLUSHed writes lost, 0 corrupt, 0 phantom;
+  35401 acked-but-unflushed writes lost (14.2% of acked) = the measured
+  memory-ack window. Viperblock's WAL + recovery pipeline is SOLID against
+  process kill.
+Failed/learned (the important part):
+- The first harness version reported 100s of "lost flushed writes" per
+  cycle. Full investigation (enumerated causes, copy-verification
+  experiment, pause-writes recovery-only experiment, no-replay probe with
+  LookupBlockToObject, backend md5 diff -- blocks.live.bin identical
+  across snapshots, ack-log line-position analysis): the accusation was a
+  HARNESS accounting bug. A FLUSH barrier only covers writes acknowledged
+  by the SAME process lifetime; the cumulative log parser let a LATER
+  session's FLUSH retroactively "cover" writes that had died unflushed in
+  a killed process's memory. All 7584 suspect blocks were single-write
+  gen-1 blocks acked after their session's last barrier. Fixed with
+  SESSION markers + session-scoped promotion (documented in the parser).
+  Lesson: when a brand-new test accuses mature code, suspect the test's
+  semantics first -- and prove it either way with discriminating
+  experiments, never by staring.
+- vb.Flush() (the NBD guest-fsync barrier) writes WAL records to the file
+  descriptor but does NOT fsync; only the 200 ms background syncer does
+  (viperblock.go WriteWAL / flushLocked / StartWALSyncer). Guest fsync is
+  therefore page-cache-durable (process kill: fine, proven above) but
+  likely NOT power-loss durable. This is the headline Phase 1 fix target;
+  the power-loss leg of P-1.3 (VM/QMP power cut) remains open to measure
+  it.
+- Viperblock's ReadAt returns ErrZeroBlock for never-persisted blocks
+  (not zero-filled data) -- harness had to treat it as semantic zero.
+- The file backend's Init requires its BaseDir to pre-exist.
+Metrics: 25-cycle study ~8 min wall (verify cost grows with volume fill);
+  writer sustains ~3.3k acked writes/s at 4 workers with 1 ms throttle.
+Fork movement: none (F2 evidence pending P-1.4 prototype).
+Next: P-1.4 WAL-replication latency prototype; power-loss leg of P-1.3.
+
+## 2026-07-27 05:10 -- AUTONOMY WIRING: DELEGATED FORKS, BRANCHES, PUSHES
+Plan: harden the plan for autonomous execution per the human's go-ahead.
+Done:
+- F0 and F1 closed by delegated judgment call (human: "check that the
+  plan is strong enough to let you work on this with maximum autonomy,
+  and lets go!"); both flagged for review in STATUS NEEDS HUMAN.
+- F6 decided: branch-per-component workflow; spinifex pushes to fork
+  gitcnd/spinifex (token verified push+admin); viperblock/predastore
+  cloned as siblings at v1.13.0 (== module versions, no divergence) with
+  local-only branches (token cannot fork: "Bad credentials" outside its
+  scope). go.work (untracked) wires the workspace; clone-deps.sh's
+  go.mod-replace approach rejected to keep the fork clean.
+- Branches created and pushed to gitcnd/spinifex: project-management
+  (working docs), feat/ebs-volume-types-and-snapshot-api,
+  feat/ebs-qos-enforcement, feat/outposts-service-parity. Local branches:
+  viperblock feat/crash-consistency-harness + feat/replicated-wal-
+  durability; predastore feat/shard-healer-and-read-repair +
+  feat/s3-api-surface-completion.
+Failed/learned: exported env vars do not persist between agent shell
+  calls (first push failed); .env must be sourced inline per push. Banked.
+Metrics: none.
+Fork movement: F0 OPEN->DECIDED (delegated); F1 LEANING->DECIDED
+  (delegated); F6 created DECIDED.
+Next: P-1.1 baseline; crash harness.
+
 ## 2026-07-27 03:25 -- addendum: full build green
 Plan: record the background full-build result.
 Done:

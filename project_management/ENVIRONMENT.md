@@ -68,6 +68,25 @@
 
 ## Traps
 
+- WILDCARD DNS (major): the resolver has an `emsvr.com` search domain with
+  a wildcard A record, so EVERY nonexistent hostname resolves to
+  91.103.1.84 (a live HTTPS server with a readnotify.com-family cert).
+  Symptom: tests using fake hosts (e.g. https://s3.mock.local) get slow TLS
+  failures instead of instant DNS failure, cascading into timeouts
+  (TestClusterManager_TLSServesHTTPS, TestEBSConfigQueueGroup_
+  DetachedOpenFails). Fix: run unit suites hermetically:
+    unshare -r -n sh -c 'ip link set lo up; <go test command>'
+  Verified 2026-07-27: both failing packages pass under the namespace.
+- Exported shell variables DO NOT persist between agent tool calls.
+  Symptom: git push fails with "could not read Username" although .env was
+  sourced earlier. Fix: source .env inline in the same command as the push.
+- The spinifex repo has a git hook ("git-meta2") that saves/restores file
+  timestamps on checkout/commit (writes .git-meta2). Harmless; do not
+  commit .git-meta2 churn on feature branches (it is untracked here).
+- `go work sync` rewrites go.mod/go.sum of ALL workspace members
+  (../viperblock, ../predastore). Revert those before baseline runs; run
+  baselines with GOWORK=off.
+
 - GOTOOLCHAIN: plain "go build/test" fails with a version error. Symptom:
   "go.mod requires go >= 1.26.5". Fix: prefix with GOTOOLCHAIN=auto (or
   install Go 1.26.5+ and put it first in PATH).

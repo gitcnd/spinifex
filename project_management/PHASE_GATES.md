@@ -8,15 +8,27 @@ that must meet them -- never after the implementation.
 
 ## Phase -1 -- De-risk and baseline (no production changes before this passes)
 
-- [ ] P-1.1 Build + unit baseline green on this machine: `make test`
+- [x] P-1.1 Build + unit baseline green on this machine: `make test`
       (GOTOOLCHAIN=auto) passes with zero failures; integration tier
       (`make test-integration`) passes or every failure is triaged in
       writing. Oracle: the repo's own suites at commit 220141b1.
+      -> unit leg (2026-07-27): green as the UNION of two modes, every
+      failure environment-attributed (artifacts /tmp/p11_unit_summary.txt,
+      /tmp/p11_hermetic_summary.txt; triage in JOURNAL entry 3):
+      normal mode = 2 package failures (daemon, services/viperblockd),
+      both caused by the machine's wildcard-DNS trap (fake host
+      s3.mock.local resolves to a real server; both packages PASS under
+      `unshare -r -n` hermetic netns). Hermetic mode = 3 package failures
+      (admin, gpu, utils) needing real interfaces/full userns perms; all
+      three PASS in normal mode. ~66 s normal / ~37 s hermetic on this
+      host.
+      -> integration leg (2026-07-27): `make test-integration` ok,
+      tests/integration 12.178 s, zero failures (GOWORK=off).
 - [ ] P-1.2 Working dev deployment exists: single-node Spinifex inside a
       Debian 13 KVM guest; `aws ec2 run-instances` + `describe-instances`
       + volume create/attach/detach round-trip succeeds via the stock AWS
       CLI. Oracle: AWS CLI exit codes + response shapes (fork F4).
-- [ ] P-1.3 Crash-consistency measurement harness exists and quantifies the
+- [~] P-1.3 Crash-consistency measurement harness exists and quantifies the
       CURRENT data-loss window: inject >= 100 crashes (kill -9 of
       viperblockd; guest power-cut via QMP quit) during sustained writes
       with a verifiable pattern; report (a) count of lost
@@ -25,6 +37,21 @@ that must meet them -- never after the implementation.
       measured, whatever its value -- this box ticks on an honest number,
       not on zero. Oracle: write-journal replay (dm-log-writes-style
       pattern verification).
+      -> artifact: viperblock branch feat/crash-consistency-harness,
+      tests/crashharness/ (commits 8723789 + 40b9ef8), report
+      tests/crashharness/results/2026-07-27_sigkill_25cycle_report.txt
+      (2026-07-27): 25 SIGKILL cycles, 249635 acked writes, 136 flush
+      barriers: (a) lost acked-unflushed 35401 (14.2% of acked -- the
+      measured memory-ack window), (b) lost FLUSHed writes 0, corrupt 0,
+      phantom 0. SIGKILL leg DONE. REMAINING (the only remaining content
+      of this box): host power-loss leg -- code reading shows vb.Flush()
+      writes WAL records without fsync (only the 200 ms background syncer
+      fsyncs), so guest fsync is likely NOT power-loss durable; needs the
+      VM/QMP power-cut harness to measure, and is the headline Phase 1 fix
+      target either way. Lesson banked: a FLUSH barrier only covers writes
+      acked by the same process lifetime; the first parser version ignored
+      session boundaries and falsely accused viperblock (harness bug,
+      fixed, documented in the parser).
 - [ ] P-1.4 WAL-replication prototype (fork F2, options b and c) measured:
       synthetic replication of WAL records to (b) a peer process over the
       network and (c) Predastore small-object PUTs; report added write
