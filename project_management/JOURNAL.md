@@ -70,6 +70,44 @@ F5 opened (LEANING ceph/s3-tests).
 Next: get human answers on F0/F1 and the NEEDS HUMAN resource items; then
 Phase -1 starting with P-1.1 (baseline unit+integration on this machine).
 
+## 2026-07-27 06:35 -- P-1.6 PREDASTORE SINGLE-NODE-KILL BASELINE:
+##                     READS SURVIVE (2320x SLOWER), WRITES GO TO ZERO
+Plan: stand up the 3-node predastore dev cluster on this host and measure
+availability through a single-node SIGKILL (gate P-1.6).
+Done:
+- Cluster: 3node config rewritten to loopback IPs (127.0.0.1/2/3, no root
+  needed), sudo shimmed to no-op (trust store + ip-addr-add skippable on
+  Linux), TLS cert regenerated so SANs cover the loopback hosts
+  (inter-node TLS verifies SANs). Cluster of 3 s3d processes healthy.
+- Probe: cmd/cluster-availability-probe on predastore branch
+  feat/shard-healer-and-read-repair (commit dbe31cf): 200 x 64 KiB
+  deterministic self-verifying objects via the AWS SDK.
+- MEASURED (full report committed next to the probe):
+  - Healthy: write 200/200 in 6.02 s; read 200/200 in 0.82 s.
+  - kill -9 node 3: read 200/200 (RS 2+1 reconstruction works) but in
+    1907.56 s (~2320x; ~9.5 s/object of dead-node timeouts).
+  - Writes during outage: 0/10 ("quic dial 127.0.0.3:9991: timeout");
+    placement requires all K+M nodes -- no degraded write path.
+  - CreateBucket during outage: fails ("all nodes failed"; the bucket
+    metadata lookup insists on the dead node despite Raft quorum).
+  - Node rejoin (data intact): reads back to 0.84 s.
+  - Nothing restores redundancy automatically (healer unimplemented,
+    matches predastore docs/TODO.md).
+- Implication for Phase 2 scope: the healer alone is NOT enough; failure
+  detection + read shortcutting + degraded/quorum writes + metadata-read
+  failover are all required for an EBS-grade backing store. Phase 2 gates
+  should be extended accordingly when Phase 2 is opened.
+Failed/learned:
+- pkill -f with a pattern contained in my own command line killed my own
+  shell (agent wrapper embeds command text) -- banked in ENVIRONMENT.md.
+- start.sh reuses an existing /tmp/predastore/server.pem; stale SANs from
+  a previous config produce inter-node x509 SAN failures -- delete the
+  cert when changing host IPs.
+Metrics: outage read study 31.8 min wall; outage write study 3 min.
+Fork movement: none directly; strengthens F1's premise (stack hardening).
+Next: P-1.4 WAL-replication prototype (F2 evidence); P-1.3 power-loss
+leg; extend Phase 2 gate list per the implication above.
+
 ## 2026-07-27 05:45 -- P-1.1 UNIT BASELINE TRIAGED GREEN (two-mode union)
 Plan: run the spinifex unit suite and triage failures (gate P-1.1).
 Done:

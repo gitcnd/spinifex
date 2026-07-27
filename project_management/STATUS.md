@@ -2,14 +2,17 @@
 
 <!-- Overwrite-in-place. History lives in JOURNAL.md. -->
 
-Last updated: 2026-07-27 05:55 (Phase -1 execution: P-1.1 ticked, P-1.3
-SIGKILL leg done with 0 flushed-write losses across 25 crash cycles)
-Current phase: Phase -1 (de-risk and baseline), 1 of 8 boxes [x], 1 [~]
-Current slice: crash-consistency harness landed on viperblock
-feat/crash-consistency-harness (commits 8723789, 40b9ef8): 25 SIGKILL
-cycles, 249635 acked writes, 0 flushed writes lost, 35401 unflushed lost
-(14.2% -- the measured memory-ack window). Unit+integration baseline green
-(with wildcard-DNS environment triage).
+Last updated: 2026-07-27 06:40 (Phase -1: P-1.1 [x]; P-1.3 SIGKILL leg
+done, 0 flushed-write losses in 25 crash cycles; P-1.6 baseline measured:
+predastore single-node outage = reads 100% available but ~2320x slower,
+writes 0% available)
+Current phase: Phase -1 (de-risk and baseline), 1/8 [x], 2/8 [~]
+Current slice: predastore availability probe + single-node-kill baseline
+on branch feat/shard-healer-and-read-repair (commit dbe31cf): healthy
+read 200/200 in 0.82 s; one node killed -> read 200/200 in 1907.56 s
+(dead-node timeouts every read), PUTs 0/10, CreateBucket fails. Phase 2
+scope must include failure detection + degraded writes + metadata
+failover, not just the healer.
 
 ## NEEDS HUMAN
 
@@ -41,7 +44,9 @@ Nothing blocking. Non-blocking queue:
     (commits 8723789, 40b9ef8). ACTIVE.
   - feat/replicated-wal-durability: Phase 1 core (awaits F2 evidence).
 - ../predastore (LOCAL-ONLY until forked):
-  - feat/shard-healer-and-read-repair, feat/s3-api-surface-completion.
+  - feat/shard-healer-and-read-repair: availability probe + P-1.6
+    baseline (commit dbe31cf). ACTIVE.
+  - feat/s3-api-surface-completion.
 
 ## What landed 2026-07-27 (3rd drop): Phase -1 first evidence
 - P-1.1 [x]: unit suite green as union of normal + hermetic-netns modes
@@ -69,20 +74,25 @@ Nothing blocking. Non-blocking queue:
 ## Next action
 1. P-1.4: WAL-replication latency prototype (informs MAJOR fork F2):
    measure (b) peer-process replication vs (c) per-write small-object PUT
-   to a local predastore dev server; compare against P-1.5 baseline.
-2. P-1.5: performance baseline. fio not confirmed installed; viperblock
-   has writebench/cachebench under viperblock/; start there, freeze CSV.
-3. P-1.3 power-loss leg: QEMU guest (user networking, /usr/libexec/
+   to a local predastore dev server (3node-loopback recipe in
+   ENVIRONMENT.md); compare against a P-1.5 engine-level baseline.
+2. P-1.3 power-loss leg: QEMU guest (user networking, /usr/libexec/
    qemu-kvm) running the writer against an NBD-served volume; QMP quit
-   mid-write; verify. Proves/disproves the Flush-no-fsync loss window.
-4. P-1.6: 3-node predastore cluster as host processes (config/3node.toml
-   in the predastore clone); kill-one-node availability + repair baseline.
-5. P-1.7: fetch ceph/s3-tests, baseline against predastore dev server.
-6. Backlog: golden-response harness design (P0.3).
+   mid-write; verify. Proves/disproves the Flush-no-fsync loss window
+   (code reading says vb.Flush does not fsync -- 200 ms syncer only).
+3. When opening Phase 2: extend its gates per the P-1.6 implication --
+   failure detection, read shortcutting, degraded/quorum writes, and
+   bucket-metadata failover, in addition to the healer (JOURNAL entry 5).
+4. P-1.5: NBD-path fio baseline (belongs with the VM deployment work);
+   engine-level interim numbers acceptable if labeled as such.
+5. P-1.7: fetch ceph/s3-tests, baseline against the loopback cluster.
+6. Backlog: golden-response harness design (P0.3); P-1.6 wiped-store
+   variant when healer work starts.
 
 ## Gate snapshot
-Phase -1: 1/8 [x] + 1/8 [~] . P0: 0/4 . P1: 0/5 . P2: 0/5 . P3: 0/6 .
-P4: 0/6 . P5: 0/4
+Phase -1: 1/8 [x] (P-1.1) + 2/8 [~] (P-1.3 SIGKILL leg, P-1.6
+availability leg) . P0: 0/4 . P1: 0/5 . P2: 0/5 . P3: 0/6 . P4: 0/6 .
+P5: 0/4
 
 ## Standing reminders
 - ALL go commands: GOTOOLCHAIN=auto. Baselines additionally GOWORK=off.

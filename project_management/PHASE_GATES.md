@@ -60,12 +60,25 @@ that must meet them -- never after the implementation.
 - [ ] P-1.5 Performance baseline frozen: fio 4k randwrite/randread and
       128k seq through the NBD path on the dev deployment; IOPS, p50/p99
       latency, throughput recorded to a frozen CSV. Oracle: fio.
-- [ ] P-1.6 Predastore failure/repair baseline: 3-node dev cluster; kill
+- [~] P-1.6 Predastore failure/repair baseline: 3-node dev cluster; kill
       one node under load; measure (a) object availability during outage
       (RS reconstruction works: target 100% of readable objects), (b) what
       restores full redundancy today (expected: nothing -- healer is
       documented-not-implemented; confirm and record). Oracle: direct
       object read-back verification.
+      -> artifact: predastore branch feat/shard-healer-and-read-repair
+      commit dbe31cf, cmd/cluster-availability-probe/ + results/
+      2026-07-27_3node_single_node_kill_baseline.txt (2026-07-27):
+      (a) READ availability 100% (200/200, RS reconstruction) BUT ~2320x
+      latency degradation (0.82 s -> 1907.56 s for 200 x 64 KiB; dead-node
+      timeouts on every read); WRITE availability 0% (0/10 PUTs, placement
+      requires all K+M nodes, no failover); CreateBucket also fails (no
+      metadata-lookup failover). Function restores on node rejoin
+      (0.84 s). (b) Confirmed: nothing restores redundancy automatically.
+      REMAINING (the only remaining content of this box): repeat with the
+      dead node's store WIPED (true shard-loss scenario) once under-load
+      variant + healer work begins; current run killed the node with data
+      intact.
 - [ ] P-1.7 s3-tests baseline: run ceph/s3-tests against Predastore; record
       pass/fail/error counts per group to a frozen artifact (fork F5). This
       box ticks on the honest baseline, not on a pass-rate.

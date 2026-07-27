@@ -86,6 +86,16 @@
 - `go work sync` rewrites go.mod/go.sum of ALL workspace members
   (../viperblock, ../predastore). Revert those before baseline runs; run
   baselines with GOWORK=off.
+- NEVER `pkill -f <pattern>` when the pattern appears in your own command
+  line: the agent shell wrapper embeds the full command text, so pkill
+  matches and kills the invoking shell mid-command (bit 2026-07-27,
+  silently truncated a restart sequence). Use pidfiles or `pgrep -x`.
+- Predastore dev clusters without root: rewrite config hosts to
+  127.0.0.x (config/3node-loopback.toml, committed on the healer branch),
+  shim `sudo` to a no-op on PATH (trust-store install + `ip addr add` are
+  skippable on Linux: 127.0.0.0/8 already routes to lo), delete
+  /tmp/predastore/server.pem first so start.sh regenerates it with the
+  loopback SANs (inter-node TLS verifies SANs).
 
 - GOTOOLCHAIN: plain "go build/test" fails with a version error. Symptom:
   "go.mod requires go >= 1.26.5". Fix: prefix with GOTOOLCHAIN=auto (or
