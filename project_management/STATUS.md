@@ -45,6 +45,13 @@ Nothing blocking. Non-blocking queue:
 6. NVMe pair: destructive use permitted? Needed by the perf phases.
 7. Optional: throwaway real AWS account for golden captures (fork F4).
 
+## Security audit (2026-07-27, read-only, forked chat)
+A preliminary hardening review landed at
+project_management/SECURITY_AUDIT_PRELIMINARY.md (no code changed) --
+handoff for a later remediation agent, priority queue inside.
+HUMAN ACTION (OPS-1): rotate/revoke the working-tree .env token; it is
+the automation's push token, so coordinate with the fork workflow.
+
 ## Branch map (fork F6)
 
 - spinifex (pushed to fork gitcnd/spinifex):

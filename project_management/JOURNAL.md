@@ -70,6 +70,40 @@ F5 opened (LEANING ceph/s3-tests).
 Next: get human answers on F0/F1 and the NEEDS HUMAN resource items; then
 Phase -1 starting with P-1.1 (baseline unit+integration on this machine).
 
+## 2026-07-27 13:55 -- PRELIMINARY SECURITY HARDENING REVIEW (READ-ONLY)
+Plan: (forked chat, this branch only) human asked for a read-only
+preliminary security audit across the three repos, documented as a
+handoff for a later remediation agent -- change nothing. Explicitly
+avoided the running cluster/tests (the other forked chat is using them).
+Done:
+- Three parallel read-only reviews (spinifex, viperblock, predastore)
+  plus manual spot-checks; consolidated into
+  project_management/SECURITY_AUDIT_PRELIMINARY.md with stable IDs
+  (SP-/VB-/PD-/OPS-), severities, evidence citations, and a
+  confirm-then-fix priority queue. NO code changed.
+- Headline provisional findings (static reading, NOT yet reproduced):
+  VB-1 Close-after-failed-drain can delete unrecovered WAL (critical,
+  data loss); PD-1/PD-2 QUIC + Raft transports lack client-cert auth
+  (critical); SP-4 authorization fail-open branches; SP-1 STS not gated
+  by caller identity policy; SP-2/SP-3 IAM Condition blocks silently
+  dropped (over-grant, incl. sts:ExternalId); PD-3/PD-4 streaming
+  per-chunk sig + trailer checksum not verified; several
+  limit-before-allocate gaps (SP-6, VB-3, PD-5, PD-6); secrets on argv /
+  in logs (SP-5, VB-4).
+- Recorded the confirmed-SAFE list per repo too, so the remediation
+  agent does not chase false positives (constant-time SigV4 compare,
+  default-deny IAM, GCM nonce discipline, TLS 1.3 floors, content-hash
+  storage keys, etc.).
+Failed/learned:
+- Framed the whole review in neutral defensive language after the first
+  run's truncated prompt; kept it strictly read-only and off the shared
+  cluster.
+Metrics: three subagent reviews ~ parallel, ~15 min wall.
+Fork movement: none (audit only; no forks touched).
+Next (for whoever picks up remediation, NOT this chat): work the
+SECURITY_AUDIT_PRELIMINARY.md priority queue, reproduce each item before
+fixing. OPS-1 (rotate the working-tree token) is a human action.
+
 ## 2026-07-27 14:45 -- IN-GUEST RIG LIVE; NBD LIFECYCLE RACE FIXED
 ##                     (VERIFICATION QUEUED BEHIND THE BUSY CLUSTER)
 Plan: work that neither blocks on nor disturbs the running s3-tests.
