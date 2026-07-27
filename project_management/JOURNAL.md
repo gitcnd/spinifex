@@ -70,6 +70,37 @@ F5 opened (LEANING ceph/s3-tests).
 Next: get human answers on F0/F1 and the NEEDS HUMAN resource items; then
 Phase -1 starting with P-1.1 (baseline unit+integration on this machine).
 
+## 2026-07-27 11:55 -- P-1.9 CANDIDATE (a): GO NBD SERVER ON PAR WITH
+##                     NBDKIT -- THE TAX IS THE PROTOCOL, NOT THE PROCESS
+Plan: prototype fork-F7 candidate (a), a native Go NBD server around the
+viperblock engine, and measure it on the identical rig as the nbdkit
+numbers.
+Done:
+- ~400-line NBD server (fixed-newstyle negotiation with NBD_OPT_GO +
+  legacy EXPORT_NAME, simple replies, 16-way worker dispatch,
+  ErrZeroBlock -> zeroes semantics) on viperblock branch
+  feat/data-path-native-nbd-server (commits 7a501af + 4c80a18).
+  qemu-img negotiated with it on the first try.
+- Measured (same predastore rig, artifact tests/perfbench/results/
+  2026-07-27_go_nbd_server_vs_nbdkit.txt): write d1 16.1k IOPS vs
+  nbdkit 15.2k (+6%); write d16 10.0k vs 12.1k (-17%); reads -10..-11%.
+- CONCLUSION (decision-relevant for F7): eliminating the nbdkit process
+  is NOT the performance fix -- any NBD server pays the same per-op
+  socket round trip, and the engine write lock + backend reads dominate
+  the rest. Candidate (a) remains worth shipping for operational
+  reasons only. The performance endgame is vhost-user-blk (shared-
+  memory virtio rings), a multi-session build. P-1.9 marked [~] with
+  exactly that remaining.
+Failed/learned:
+- Committed unformatted Go on two branches (gofmt -l after, not before,
+  the commit); fixed with style commits. Add gofmt to the pre-commit
+  habit for these tool dirs.
+Metrics: server written+negotiating in ~25 min; bench matrix ~5 min
+  (read d1 dominates at 255.7 s).
+Fork movement: F7 evidence extended; stays OPEN pending vhost-user-blk.
+Next: F2 human ack; P-1.3 power-loss leg; P-1.7 s3-tests baseline;
+vhost-user-blk prototype planning.
+
 ## 2026-07-27 11:05 -- P-1.5 COMPLETE: NBDKIT TAX MEASURED (2.5-3.8x);
 ##                     NO ROOT NEEDED FOR THE WHOLE RIG
 Plan: build the NBD-path rig without root and measure the nbdkit tax

@@ -2,16 +2,16 @@
 
 <!-- Overwrite-in-place. History lives in JOURNAL.md. -->
 
-Last updated: 2026-07-27 11:10 (P-1.5 [x] both legs -- nbdkit tax
-measured at 2.5-3.8x with a fully no-root rig; production NBD path
-writes 15.2k IOPS where the engine acks in 5 us)
-Current phase: Phase -1 (de-risk and baseline), 3/9 [x], 2/9 [~]
-Current slice: NBD-path measurements (viperblock commit 5c0155f):
-nbdkit's own C plugin loses 2.5-3.8x on 4 KiB IOPS vs direct file;
-nbdkit+Go-plugin+predastore: 15.2k write IOPS d1, 12.1k d16 (regresses
-with depth -- engine lock contention), 439 read IOPS d1 (backend-
-dominated). F7 evidence appended; bonus bug filed (reconnect recovery
-dies on missing local checkpoints dir).
+Last updated: 2026-07-27 12:00 (P-1.9 candidate (a) measured: a native
+Go NBD server is ON PAR with nbdkit -- the tax is the NBD round trip,
+not the nbdkit process; vhost-user-blk confirmed as the endgame)
+Current phase: Phase -1 (de-risk and baseline), 3/9 [x], 3/9 [~]
+Current slice: Go NBD server prototype (viperblock branch
+feat/data-path-native-nbd-server, commit 7a501af): write d1 16.1k IOPS
+vs nbdkit 15.2k (+6%), write d16 -17%, reads -10%. Dropping nbdkit is
+operationally useful (no C shim/packaging gap/extra process) but not a
+performance fix. Remaining for F7: a vhost-user-blk prototype
+(multi-session build).
 
 ## NEEDS HUMAN
 
@@ -86,12 +86,15 @@ Nothing blocking. Non-blocking queue:
 - Research, machine audit, phased plan, fork registry. JOURNAL entry 1.
 
 ## Next action
-1. P-1.9 (fork F7): prototype the native-Go-NBD server (serve the
-   viperblock engine over the NBD protocol directly, no nbdkit) and
-   measure with the SAME qemu-img bench matrix as P-1.5(ii); stretch:
-   vhost-user-blk skeleton. Note from the evidence: pair any transport
-   win with engine write-lock work (writes regress at depth 16) or it
-   will not show up end to end.
+1. P-1.3 power-loss leg: QEMU guest (user networking, /usr/libexec/
+   qemu-kvm) with the crash-harness writer on an NBD-served volume
+   (the new Go NBD server works for this); QMP quit mid-write; verify.
+   Proves/disproves the Flush-no-fsync power-loss window.
+2. P-1.7: fetch ceph/s3-tests, baseline against the loopback cluster.
+3. F7 endgame planning: vhost-user-blk backend design note (protocol
+   handshake, virtqueue handling, memory-region mapping in Go or a
+   thin Rust sidecar) -- decide build shape before writing code; pair
+   with engine write-lock work (writes regress at depth 16).
 2. P-1.3 power-loss leg: QEMU guest (user networking, /usr/libexec/
    qemu-kvm) running the writer against an NBD-served volume; QMP quit
    mid-write; verify. Proves/disproves the Flush-no-fsync loss window

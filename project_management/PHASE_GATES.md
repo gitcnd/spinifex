@@ -128,7 +128,7 @@ that must meet them -- never after the implementation.
       box ticks on the honest baseline, not on a pass-rate.
 - [ ] P-1.8 Human notified: Phase -1 review; forks F0/F1 answered, F2
       decided from P-1.4 evidence.
-- [ ] P-1.9 Data-path candidates measured (fork F7, ADDED 2026-07-27 at
+- [~] P-1.9 Data-path candidates measured (fork F7, ADDED 2026-07-27 at
       the human's request: "nbdkit is a bottleneck ... needs to be
       replaced with a block device driver"): prototype at least one of
       vhost-user-blk / ublk backed by the viperblock engine (plus the
@@ -137,6 +137,18 @@ that must meet them -- never after the implementation.
       improvement over the nbdkit path. Gate: honest numbers for >= 2
       alternatives (counting native-NBD) sufficient to move F7 to
       LEANING with evidence. Oracle: fio, same rig as P-1.5.
+      -> candidate (a) native Go NBD server MEASURED (2026-07-27):
+      viperblock branch feat/data-path-native-nbd-server commit 7a501af,
+      tests/perfbench/results/2026-07-27_go_nbd_server_vs_nbdkit.txt.
+      Same rig as P-1.5(ii): write d1 16.1k vs nbdkit 15.2k IOPS (+6%),
+      write d16 10.0k vs 12.1k (-17%), reads -10..-11%. FINDING:
+      dropping nbdkit is operationally useful (no C shim, no packaging
+      gap, one less process) but NOT a performance fix -- the NBD
+      round trip + engine write lock + backend reads dominate.
+      REMAINING (the only remaining content of this box): a
+      vhost-user-blk (or ublk) prototype -- the shared-memory candidates
+      that actually remove the per-op socket round trip. That is a
+      multi-session build; F7 stays OPEN until its numbers exist.
 
 ## Phase 0 -- Harness and regression infrastructure
 
