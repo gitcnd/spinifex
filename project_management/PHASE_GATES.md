@@ -131,9 +131,17 @@ that must meet them -- never after the implementation.
       dead node's store WIPED (true shard-loss scenario) once under-load
       variant + healer work begins; current run killed the node with data
       intact.
-- [~] P-1.7 s3-tests baseline: run ceph/s3-tests against Predastore; record
+- [x] P-1.7 s3-tests baseline: run ceph/s3-tests against Predastore; record
       pass/fail/error counts per group to a frozen artifact (fork F5). This
       box ticks on the honest baseline, not on a pass-rate.
+      -> COMPLETE (2026-07-27, overnight chain): 123 passed / 621 failed /
+      94 skipped of 838 collected, 35m31s, 60 s signal timeouts. Frozen
+      artifact: predastore tools/s3tests/results/2026-07-27_baseline_
+      counts.txt (commit 72c6269) with the full pass/fail list + area
+      breakdown (sse/encryption 185, acl 59, multipart 54, policy 42,
+      lifecycle 35, versioning 24, cors 14). Caveats recorded there:
+      single credential set, no versioning; the number is the FLOOR for
+      Phase 2 gate P2.4.
       -> IN PROGRESS (2026-07-27): ceph/s3-tests cloned, venv built
       (python 3.9), predastore-loopback.conf written (region via
       AWS_DEFAULT_REGION=ap-southeast-2; single credential set reused

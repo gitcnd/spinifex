@@ -6,7 +6,7 @@ Last updated: 2026-07-27 16:20 (OVERNIGHT MODE: chain running -- s3-tests
 v3 baseline, then automated NBD-race pre/post verification, then cluster
 shutdown; regression-runner validation also running; vhost-user codec +
 virtqueue slice landed with green unit tests)
-Current phase: Phase -1 (de-risk and baseline), 4/9 [x], 3/9 [~]
+Current phase: Phase -1 (de-risk and baseline), 5/9 [x], 2/9 [~]
 Current slice: F7 vhost-user skeleton (viperblock commit a783271):
 protocol codec + split-ring parsing, 5 unit tests, no QEMU needed yet.
 Overnight chain artifacts will land in /tmp/overnight/ (chain.log,

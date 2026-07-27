@@ -140,6 +140,34 @@ Next (for whoever picks up remediation, NOT this chat): work the
 SECURITY_AUDIT_PRELIMINARY.md priority queue, reproduce each item before
 fixing. OPS-1 (rotate the working-tree token) is a human action.
 
+## 2026-07-27 18:20 -- OVERNIGHT CHAIN RESULTS: P-1.7 FROZEN (123/621/94);
+##                     RACE PRE-FIX LEG INVALID (FIPS BUILD FLAG), RERUNNING
+Plan: process the overnight chain completion.
+Done:
+- P-1.7 TICKED [x]: full ceph/s3-tests baseline complete in 35m31s:
+  123 passed / 621 failed / 94 skipped of 838. Area breakdown:
+  sse/encryption 185, acl 59, multipart 54, policy 42, lifecycle 35,
+  versioning 24, cors 14. Frozen with the full pass/fail list:
+  predastore tools/s3tests/results/2026-07-27_baseline_counts.txt
+  (commit 72c6269, pushed). This is the Phase 2 P2.4 floor.
+- Race verification: POST-fix leg valid (60 iterations, 0 hits, ~2 min
+  per iteration -- reconnect recovery against predastore is slow, itself
+  worth noting). PRE-fix leg INVALID: the plugin I built from main
+  crashed at startup -- built without GOFIPS140=v1.0.0, and viperblock's
+  fipsboot guard refuses to run (trap banked: ALWAYS build the plugin
+  via the Makefile target or set GOFIPS140 explicitly). Rebuilt with the
+  flag, verified loadable with --dump-plugin, and a tracked rerun chain
+  (30 iterations + cluster start/stop) is in flight.
+- Cleanup: one leftover s3d killed; machine otherwise clean.
+Failed/learned: GOFIPS140=v1.0.0 is REQUIRED at build time for any
+  binary embedding viperblock (fipsboot init panics otherwise); the
+  overnight chain should have smoke-checked the plugin loads before
+  depending on it (now done in the rerun script).
+Metrics: baseline 35m31s; postfix race leg 2h00 for 60 iterations.
+Fork movement: none.
+Next: pre-fix race count -> finish fix verification note; morning
+report; vhost-user daemon loop.
+
 ## 2026-07-27 16:15 -- OVERNIGHT SESSION ARMED; VHOST-USER SKELETON LANDED
 Plan: human going to bed; maximize unattended progress (protocol 09).
 Done:
