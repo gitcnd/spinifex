@@ -70,6 +70,46 @@ F5 opened (LEANING ceph/s3-tests).
 Next: get human answers on F0/F1 and the NEEDS HUMAN resource items; then
 Phase -1 starting with P-1.1 (baseline unit+integration on this machine).
 
+## 2026-07-27 11:05 -- P-1.5 COMPLETE: NBDKIT TAX MEASURED (2.5-3.8x);
+##                     NO ROOT NEEDED FOR THE WHOLE RIG
+Plan: build the NBD-path rig without root and measure the nbdkit tax
+(P-1.5(ii), fork F7 evidence).
+Done:
+- nbdkit 1.38.5 + devel headers obtained WITHOUT root: dnf download +
+  rpm2cpio extract to /tmp/nbdkit-root; wrote a corrected nbdkit.pc
+  (prefix + missing Cflags) and built the viperblock nbdkit plugin with
+  PKG_CONFIG_PATH pointing at it (make go_build_nbd, 33 MB .so).
+- Transport tax isolated (qemu-img bench, 4 KiB, unix socket, same raw
+  file): direct 86.2k read IOPS d1 / 298k d16 / 80.7k write d1; through
+  nbdkit's own C file plugin 33.6k / 78.4k / 32.3k = 2.5-3.8x loss.
+  The human's bottleneck call is confirmed with numbers.
+- Production path (nbdkit + Go plugin + predastore 3-node loopback,
+  volume seeded by new createvol-s3 helper): write d1 15.2k IOPS,
+  write d16 12.1k (regresses with depth -- engine lock contention,
+  matches the engine baseline), read d1 439 IOPS (2.28 ms/op,
+  backend-dominated), read d16 5.1k. Artifact:
+  tests/perfbench/results/2026-07-27_nbd_path_vs_direct.txt (commit
+  5c0155f). P-1.5 ticked [x]; F7 evidence appended (fork stays OPEN for
+  P-1.9 candidate prototypes).
+Failed/learned:
+- BUG (filed in STATUS backlog): reconnecting to the plugin after an
+  unclean client disconnect triggers WAL recovery that dies on a
+  missing local checkpoints directory ("open .../checkpoints/
+  blocks.00000000.bin: no such file or directory") -- volume unserveable
+  for that connection. Recovery path assumes a directory that fresh
+  WAL base_dirs lack.
+- Bit my own banked pkill trap AGAIN (pgrep -f "qemu-img bench" matched
+  the wrapper shell): the trap entry now exists for a reason; use
+  pgrep -x. Also: a daemonized nbdkit survived a pidfile kill (pidfile
+  held the subshell pid) and two nbdkits briefly contended for the same
+  socket path, causing a silent first-bench stall -- always verify with
+  pgrep -x after kills.
+Metrics: whole rig built + measured in ~45 min; nbdkit RPM download was
+  the slowest step (~3 min of dnf metadata).
+Fork movement: F7 evidence appended (stays OPEN pending P-1.9).
+Next: P-1.9 native-Go-NBD + vhost-user-blk prototypes; P-1.3 power-loss
+leg; P-1.7 s3-tests; F2 ack from human.
+
 ## 2026-07-27 09:20 -- P-1.4 DECIDES F2 (LEANING PEER REPLICATION);
 ##                     P-1.5 ENGINE BASELINE FROZEN
 Plan: run the two measurement gates queued in STATUS: engine perf

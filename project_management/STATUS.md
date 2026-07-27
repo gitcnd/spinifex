@@ -2,16 +2,16 @@
 
 <!-- Overwrite-in-place. History lives in JOURNAL.md. -->
 
-Last updated: 2026-07-27 09:25 (P-1.4 [x] -- F2 leaning peer replication
-on measured numbers; P-1.5 engine leg frozen; new finding: sustained
-writes stall for minutes behind drains)
-Current phase: Phase -1 (de-risk and baseline), 2/9 [x], 3/9 [~]
-Current slice: F2 evidence landed (viperblock commit f7d5ca1): peer
-replication costs +3 us over local fsync (p50 5630 vs 5627 us same-run);
-per-write predastore PUTs 77-293 ms p50 -> rejected. Engine baseline
-frozen (commit 19adcf3): randwrite acks in 5 us but MAX 175-420 s
-(drain stalls = guest-visible freeze -- new Phase 1 concern); flush
-barrier p50 8.9 ms; randread 92.6k IOPS @16 workers.
+Last updated: 2026-07-27 11:10 (P-1.5 [x] both legs -- nbdkit tax
+measured at 2.5-3.8x with a fully no-root rig; production NBD path
+writes 15.2k IOPS where the engine acks in 5 us)
+Current phase: Phase -1 (de-risk and baseline), 3/9 [x], 2/9 [~]
+Current slice: NBD-path measurements (viperblock commit 5c0155f):
+nbdkit's own C plugin loses 2.5-3.8x on 4 KiB IOPS vs direct file;
+nbdkit+Go-plugin+predastore: 15.2k write IOPS d1, 12.1k d16 (regresses
+with depth -- engine lock contention), 439 read IOPS d1 (backend-
+dominated). F7 evidence appended; bonus bug filed (reconnect recovery
+dies on missing local checkpoints dir).
 
 ## NEEDS HUMAN
 
@@ -86,12 +86,12 @@ Nothing blocking. Non-blocking queue:
 - Research, machine audit, phased plan, fork registry. JOURNAL entry 1.
 
 ## Next action
-1. F7 / P-1.9 + P-1.5(ii): build the NBD-path rig -- get nbdkit without
-   root (dnf download + rpm2cpio extract to ~/opt, or source build),
-   build the viperblock nbdkit plugin (source in the git clone), measure
-   the fio matrix vs the frozen engine baseline; then prototype the
-   native-Go-NBD server and (stretch) vhost-user-blk (qemu-img bench can
-   drive NBD URIs without root).
+1. P-1.9 (fork F7): prototype the native-Go-NBD server (serve the
+   viperblock engine over the NBD protocol directly, no nbdkit) and
+   measure with the SAME qemu-img bench matrix as P-1.5(ii); stretch:
+   vhost-user-blk skeleton. Note from the evidence: pair any transport
+   win with engine write-lock work (writes regress at depth 16) or it
+   will not show up end to end.
 2. P-1.3 power-loss leg: QEMU guest (user networking, /usr/libexec/
    qemu-kvm) running the writer against an NBD-served volume; QMP quit
    mid-write; verify. Proves/disproves the Flush-no-fsync loss window
@@ -106,6 +106,13 @@ Nothing blocking. Non-blocking queue:
    a Phase 1 target -- likely bounded write-buffer + async drain tuning.
 7. Backlog: golden-response harness design (P0.3); P-1.6 wiped-store
    variant when healer work starts.
+8. BUG backlog (found by the P-1.5 rig, belongs on the durability
+   branch): nbdkit-plugin reconnect after an unclean client disconnect
+   triggers WAL recovery that fails on a missing local checkpoints
+   directory ("open .../checkpoints/blocks.00000000.bin: no such file")
+   leaving the volume unserveable for that connection. Reproduce: seed
+   fresh base_dir with createvol-s3, connect+disconnect qemu-img bench
+   twice. Also: qemu reconnect robustness deserves its own test.
 
 ## Gate snapshot
 Phase -1: 1/8 [x] (P-1.1) + 2/8 [~] (P-1.3 SIGKILL leg, P-1.6

@@ -173,3 +173,13 @@ Escalation path: (b) vhost-user-blk is the presumptive endgame for VM
   competing. A native QEMU block driver in C (cgo into viperblock) was
   considered and rejected upfront: highest maintenance burden against
   QEMU internals for no advantage over (b).
+2026-07-27 EVIDENCE (P-1.5(ii), viperblock commit 5c0155f): the nbdkit
+  tax is real and measured -- 2.5-3.8x 4 KiB IOPS loss vs direct file
+  with nbdkit's own C plugin; production path writes 15.2k IOPS d1 where
+  the engine acks in ~5 us. TWO qualifiers the decision must respect:
+  (1) viperblock writes REGRESS with queue depth (12.1k IOPS at d16 vs
+  15.2k at d1 -- engine write-lock contention), so transport replacement
+  alone will not deliver its win without engine concurrency work;
+  (2) depth-1 reads are backend-dominated (2.28 ms/op with predastore
+  chunk GETs), so the read path's leverage is cache/backend, not
+  transport. Fork stays OPEN pending P-1.9 candidate prototypes.

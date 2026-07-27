@@ -76,7 +76,7 @@ that must meet them -- never after the implementation.
       Note: oracle is the prototype's own timers (fio does not apply to
       a userspace replication path); tolerances not applicable -- this
       gate produces the decision evidence, and did.
-- [~] P-1.5 Performance baseline frozen, SPLIT BY LAYER (feeds fork F7):
+- [x] P-1.5 Performance baseline frozen, SPLIT BY LAYER (feeds fork F7):
       (i) viperblock engine-level (direct WriteAt/ReadAt bench) and
       (ii) full NBD path (fio in the dev deployment through
       qemu -> nbdkit -> viperblock): 4k randwrite/randread + 128k seq;
@@ -91,9 +91,19 @@ that must meet them -- never after the implementation.
       (guest-visible freeze; new Phase 1 concern alongside durability);
       flush barrier p50 8.9 ms / p99 100 ms at 4 MiB dirty; randread-4k
       6.1k IOPS @1 / 92.6k @16 (p50 ~160 us); seqwrite-128k 117 MB/s.
-      REMAINING (the only remaining content of this box): (ii) the NBD
-      path -- needs nbdkit (build or rpm-extract without root) or lands
-      with the F7 candidate prototypes (P-1.9) which need the same rig.
+      -> (ii) DONE (2026-07-27): viperblock commit 5c0155f,
+      tests/perfbench/results/2026-07-27_nbd_path_vs_direct.txt.
+      nbdkit 1.38.5 run as user (rpm-extracted), qemu-img bench 4 KiB
+      over unix socket. Transport tax isolated with nbdkit's own C file
+      plugin: 2.5-3.8x IOPS loss vs direct file (86.2k -> 33.6k read d1;
+      298k -> 78.4k d16; 80.7k -> 32.3k write d1). Production path
+      (nbdkit + Go plugin + predastore): 15.2k write IOPS d1, 12.1k d16
+      (REGRESSES with depth -- engine write-lock contention), 439 read
+      IOPS d1 (2.28 ms/op, backend-dominated), 5.1k d16. Caveats
+      recorded in the artifact: single runs, shared host, backend
+      differs from the (i) engine baseline (predastore vs file). Bonus
+      bug found: reconnect-after-unclean-disconnect recovery fails on a
+      missing local checkpoints dir (STATUS backlog).
 - [~] P-1.6 Predastore failure/repair baseline: 3-node dev cluster; kill
       one node under load; measure (a) object availability during outage
       (RS reconstruction works: target 100% of readable objects), (b) what
