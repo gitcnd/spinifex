@@ -140,6 +140,31 @@ Next (for whoever picks up remediation, NOT this chat): work the
 SECURITY_AUDIT_PRELIMINARY.md priority queue, reproduce each item before
 fixing. OPS-1 (rotate the working-tree token) is a human action.
 
+## 2026-07-27 20:15 -- RACE FIX VERIFICATION CLOSED HONESTLY: REPRODUCER
+##                     TOO WEAK TO DIFFERENTIATE; FIX STANDS ON MECHANISM
+Plan: process the pre-fix race leg results.
+Done:
+- Valid pre-fix leg: 30 write(4M)+reconnect iterations, 0 hits. So the
+  cheap reproducer cannot trigger the race even WITHOUT the fix -- its
+  close-side drain window is milliseconds, while the wild occurrence
+  followed a ~400 MB burst (seconds-wide drain). Recorded plainly
+  (viperblock fix/nbd-close-open-race commit 9907f0e): the fix is NOT
+  differentially validated; it stands on the code-evident mechanism,
+  fix-by-construction (one mutex), and 60 clean post-fix iterations.
+  A faithful long-drain reproducer (~5 min/iteration) is queued as
+  nice-to-have.
+- Cleanup: the earlier leftover s3d (ignored SIGTERM) and the rerun's
+  nbdkit (pidfile held the subshell pid -- recurring pattern) needed
+  kill -9; machine verified clean.
+Failed/learned: nbdkit's -P pidfile is written by nbdkit itself, but my
+  scripts captured $! of the launching subshell instead in two places;
+  when scripting nbdkit, always kill via ITS pidfile, and verify with
+  pgrep -x afterwards.
+Metrics: pre-fix leg 2h00 for 30 iterations (cluster start to stop).
+Fork movement: none.
+Next: morning report; vhost-user daemon loop (message loop + eventfd
+kick/call + engine wiring).
+
 ## 2026-07-27 18:20 -- OVERNIGHT CHAIN RESULTS: P-1.7 FROZEN (123/621/94);
 ##                     RACE PRE-FIX LEG INVALID (FIPS BUILD FLAG), RERUNNING
 Plan: process the overnight chain completion.
