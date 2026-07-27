@@ -137,10 +137,15 @@ that must meet them -- never after the implementation.
       -> IN PROGRESS (2026-07-27): ceph/s3-tests cloned, venv built
       (python 3.9), predastore-loopback.conf written (region via
       AWS_DEFAULT_REGION=ap-southeast-2; single credential set reused
-      for alt/tenant -- cross-account tests not meaningful, recorded);
-      smoke tests pass (bucket_list_empty, bucket_list_distinct); full
-      838-test run of s3tests/functional/test_s3.py launched with 60 s
-      per-test timeouts. Counts to be frozen when it completes.
+      for alt/tenant -- cross-account tests not meaningful, recorded).
+      FINDING #1 (itself baseline evidence): the stock suite CANNOT run
+      -- its per-test cleanup needs ListObjectVersions + DeleteObjects
+      (both known P2.3 gaps), so buckets become undeletable and 836/838
+      tests died in setup cascade. Fixed with a cleanup-glue-only patch
+      (assertions untouched), committed reproducibly with conf + README
+      as predastore tools/s3tests/ (commit 8888530). Full 838-test run
+      v2 now in flight with 60 s per-test timeouts; counts to be frozen
+      on completion (the only remaining content of this box).
 - [ ] P-1.8 Human notified: Phase -1 review; forks F0/F1 answered, F2
       decided from P-1.4 evidence.
 - [~] P-1.9 Data-path candidates measured (fork F7, ADDED 2026-07-27 at

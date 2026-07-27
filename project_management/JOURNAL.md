@@ -70,6 +70,34 @@ F5 opened (LEANING ceph/s3-tests).
 Next: get human answers on F0/F1 and the NEEDS HUMAN resource items; then
 Phase -1 starting with P-1.1 (baseline unit+integration on this machine).
 
+## 2026-07-27 13:40 -- P-1.7: STOCK S3-TESTS CANNOT EVEN CLEAN UP AFTER
+##                     ITSELF AGAINST PREDASTORE (BASELINE FINDING #1)
+Plan: get a meaningful per-test s3-tests baseline.
+Done:
+- First full run: 2 passed, 836 ERRORS in a cascade -- root-caused, not
+  guessed: the suite's nuke_bucket needs ListObjectVersions (predastore
+  answers it EMPTY, not with an error) + DeleteObjects (missing), so
+  DeleteBucket hits BucketNotEmpty and every later test dies in setup.
+  Both operations were already on the P2.3 gap list; the suite just
+  turned them into a hard blocker. That is baseline finding #1.
+- Wrote a cleanup-glue-only patch (nuke fallback: ListObjectsV2 +
+  per-key DeleteObject; assertions untouched) -- oracle-rig
+  accommodation in the FEMM-mesh-forcing tradition, documented in the
+  patch header. Verified: previously-cascading tests now produce real
+  pass/fail. Rig committed reproducibly (patch + conf + README) as
+  predastore tools/s3tests/ (commit 8888530, pushed).
+- Full run v2 in flight (60 s per-test timeouts, 4 h cap). Debian 13
+  cloud image download started in background for the upcoming in-guest
+  rig (serves P-1.2, P-1.9 bench, P1.4 verification).
+Failed/learned:
+- An unversioned store that answers ListObjectVersions with an empty
+  200 (instead of NotImplemented) silently breaks clients that fall
+  back on error -- worth fixing in predastore as part of P2.3 (return
+  NotImplemented, or implement the listing shape unversioned).
+Metrics: cascade root-cause ~20 min; patch + verify ~15 min.
+Fork movement: none.
+Next: freeze v2 counts; then in-guest rig.
+
 ## 2026-07-27 12:50 -- F2 DEFERRED BY HUMAN; POWER-LOSS MECHANISM PROVEN
 ##                     BY STRACE; S3-TESTS BASELINE LAUNCHED; F7 DESIGN
 ##                     NOTE WRITTEN

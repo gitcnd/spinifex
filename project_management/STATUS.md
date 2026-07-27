@@ -2,16 +2,17 @@
 
 <!-- Overwrite-in-place. History lives in JOURNAL.md. -->
 
-Last updated: 2026-07-27 12:55 (F2 deferred by human; P-1.3 CLOSED --
-strace proves guest FLUSH never fsyncs; s3-tests baseline running;
-F7 vhost-user-blk design note written)
+Last updated: 2026-07-27 13:45 (F2 deferral window used well: P-1.3
+closed by strace proof; s3-tests unblocked after an 836-error cascade
+root-cause; run v2 in flight; F7 design note done; Debian 13 image
+downloading for the in-guest rig)
 Current phase: Phase -1 (de-risk and baseline), 4/9 [x], 3/9 [~]
-Current slice: power-loss mechanism proven at syscall level (zero
-fsyncs across 50 explicit NBD FLUSHes; viperblock commit a40cc27) --
-P-1.3 closed via open gate restructure, loss-counting rig displaced to
-P1.4 (fix verification). s3-tests 838-test baseline running in
-background. F7 design decided on paper: pure-Go vhost-user-blk in
-viperblockd, amd64-first (F7_VHOST_USER_BLK_DESIGN_NOTE.md).
+Current slice: s3-tests baseline finding #1 -- the stock suite cannot
+even clean up after itself against predastore (needs ListObjectVersions
++ DeleteObjects, both known P2.3 gaps; ListObjectVersions answered with
+an EMPTY 200 which silently defeats error-triggered fallbacks). Fixed
+with a cleanup-glue-only patch, rig committed reproducibly (predastore
+tools/s3tests/, commit 8888530). Full 838-test run v2 in background.
 
 ## NEEDS HUMAN
 
@@ -86,15 +87,19 @@ Nothing blocking. Non-blocking queue:
 - Research, machine audit, phased plan, fork registry. JOURNAL entry 1.
 
 ## Next action
-1. P-1.3 power-loss leg: QEMU guest (user networking, /usr/libexec/
-   qemu-kvm) with the crash-harness writer on an NBD-served volume
-   (the new Go NBD server works for this); QMP quit mid-write; verify.
-   Proves/disproves the Flush-no-fsync power-loss window.
-2. P-1.7: fetch ceph/s3-tests, baseline against the loopback cluster.
-3. F7 endgame planning: vhost-user-blk backend design note (protocol
-   handshake, virtqueue handling, memory-region mapping in Go or a
-   thin Rust sidecar) -- decide build shape before writing code; pair
-   with engine write-lock work (writes regress at depth 16).
+1. Freeze the s3-tests v2 counts when the background run completes
+   (ticks P-1.7); commit the results file to predastore tools/s3tests/.
+2. In-guest rig (image downloading at ../vm-images): cloud-init NoCloud
+   seed ISO (genisoimage present), boot Debian 13 under
+   /usr/libexec/qemu-kvm with user networking; this rig serves P-1.2
+   (dev deployment), the F7/P-1.9 in-guest fio bench, and P1.4's future
+   fix verification.
+3. F7 vhost-user-blk implementation start per
+   F7_VHOST_USER_BLK_DESIGN_NOTE.md (pure Go, single queue) -- gated
+   behind the in-guest rig existing to bench it.
+4. P2.3 note for Phase 2: make predastore answer ListObjectVersions
+   with NotImplemented (or a real unversioned shape) instead of an
+   empty 200 -- the empty 200 silently defeats client fallbacks.
 2. P-1.3 power-loss leg: QEMU guest (user networking, /usr/libexec/
    qemu-kvm) running the writer against an NBD-served volume; QMP quit
    mid-write; verify. Proves/disproves the Flush-no-fsync loss window
