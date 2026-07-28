@@ -173,10 +173,21 @@ that must meet them -- never after the implementation.
       dropping nbdkit is operationally useful (no C shim, no packaging
       gap, one less process) but NOT a performance fix -- the NBD
       round trip + engine write lock + backend reads dominate.
-      REMAINING (the only remaining content of this box): a
-      vhost-user-blk (or ublk) prototype -- the shared-memory candidates
-      that actually remove the per-op socket round trip. That is a
-      multi-session build; F7 stays OPEN until its numbers exist.
+      -> candidate (b) vhost-user-blk PROTOTYPE BUILDING (2026-07-28,
+      viperblock branch feat/data-path-vhost-user-blk): pure-Go
+      vhost-user protocol codec + split-virtqueue + backend daemon, with
+      an in-process functional test (QEMU-role frontend over a real
+      socket/memfd/eventfds: write/read-verify/flush) GREEN. Real-QEMU
+      smoke test (commit d7dc4f9): host QEMU 7.2 has vhost-user-blk-pci;
+      the FULL vhost-user negotiation completes (all message types
+      through SET_VRING_KICK + SET_VRING_ENABLE accepted). Wedge to fix
+      next session: QEMU busy-loops at 96% CPU (empty guest serial)
+      after a SECOND SET_MEM_TABLE issued post-queue-start -- the running
+      virtqueue is not remapped to the new regions; fix = remap live
+      vrings on mem-table change, confirm with QEMU's vhost-user trace.
+      REMAINING (the only remaining content of this box): land that
+      remap, boot the guest, run in-guest fio vhost-vs-NBD -> the F7
+      decision numbers. F7 stays OPEN until they exist.
 
 ## Phase 0 -- Harness and regression infrastructure
 

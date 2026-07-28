@@ -2,7 +2,7 @@
 
 <!-- Overwrite-in-place. History lives in JOURNAL.md. -->
 
-Last updated: 2026-07-28 04:00 (F2 slice 2 landed: peer replication wired into the flush barrier, replica WAL byte-identical to primary, fail-closed on replica death; P1.1 [~] P1.4 [~])
+Last updated: 2026-07-28 04:45 (two next-up tracks advanced: F2 peer replication in the barrier + F7 vhost-user QEMU smoke -- negotiation fully works, one remap wedge banked)
 v3 baseline, then automated NBD-race pre/post verification, then cluster
 shutdown; regression-runner validation also running; vhost-user codec +
 virtqueue slice landed with green unit tests)

@@ -140,6 +140,38 @@ Next (for whoever picks up remediation, NOT this chat): work the
 SECURITY_AUDIT_PRELIMINARY.md priority queue, reproduce each item before
 fixing. OPS-1 (rotate the working-tree token) is a human action.
 
+## 2026-07-28 04:40 -- F7 QEMU SMOKE: NEGOTIATION FULLY WORKS; MEM-TABLE
+##                     REMAP-AFTER-START WEDGE (SPIRAL-RULED, BANKED)
+Plan: drive the vhost-user backend from real QEMU (P-1.9 candidate b).
+Done:
+- vhost-user-blk-serve raw-file command (viperblock commit d7dc4f9,
+  pushed). Host QEMU 7.2 confirmed to have vhost-user-blk-pci.
+- Real-QEMU smoke test: the FULL vhost-user handshake completes -- with
+  per-request logging I confirmed QEMU sends and my backend handles, in
+  order: GET_FEATURES, GET/SET_PROTOCOL_FEATURES, SET_OWNER,
+  SET_VRING_CALL/ERR, GET_CONFIG, SET_FEATURES, SET_MEM_TABLE,
+  SET_VRING_NUM/BASE/ADDR, SET_VRING_KICK, SET_VRING_ENABLE. Every
+  message accepted; QEMU proceeds through device realize.
+Failed/learned (spiral rule applied -- third sub-problem, banked and
+  stopped):
+- After enable, QEMU issues a SECOND SET_MEM_TABLE and then busy-loops
+  at 96% CPU with an EMPTY guest serial. Root-cause hypothesis (strong):
+  the service goroutine started at the first KICK holds VirtQueue slices
+  into the ORIGINAL mmap; the remap is not applied to the live queue.
+  Fix next session: on SET_MEM_TABLE while running, re-map the vrings
+  (and munmap old regions); confirm with QEMU -trace 'vhost_user*'.
+- pidfile trap, AGAIN: my launch subshell's $! is not the server's pid;
+  two commits silently no-op'd because a leftover vhost-serve held
+  state / and a multi-line -m in an && chain mangled. Lesson tripled:
+  use pgrep -x / pkill -f by name, and commit with a single-line -m in
+  chained commands. Machine verified clean (no qemu/serve).
+Metrics: negotiation reaches enable in <1 s; smoke debug ~30 min
+  (timeboxed).
+Fork movement: F7 candidate (b) prototype building; stays OPEN pending
+  the in-guest fio numbers.
+Next: mem-table remap-after-start fix -> guest boot -> in-guest fio
+  vhost-vs-NBD (the F7 decision).
+
 ## 2026-07-28 03:55 -- F2 SLICE 2: PEER REPLICATION WIRED INTO THE BARRIER,
 ##                     REPLICA WAL BYTE-IDENTICAL TO PRIMARY
 Plan: build the F2 replication transport and wire it into the engine.
