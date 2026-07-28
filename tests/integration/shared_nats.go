@@ -7,11 +7,13 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/nats-io/nats-server/v2/server"
 	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 )
 
 // sharedNATSHarness is the package-wide handle TestMain installs before
@@ -69,12 +71,12 @@ func startSharedNATS() (*sharedNATS, error) {
 // namespace no other test's account can see or collide with. The returned
 // connection is tracked and closed by TestMain once every test has
 // finished, not by the caller — see the TestMain doc comment for why.
-func (h *sharedNATS) connectIsolated(name string) (*nats.Conn, nats.JetStreamContext, error) {
+func (h *sharedNATS) connectIsolated(name string) (*nats.Conn, jetstream.JetStream, error) {
 	nc, err := nats.Connect(h.srv.ClientURL(), nats.UserInfo(name, "x"))
 	if err != nil {
 		return nil, nil, fmt.Errorf("connect: %w", err)
 	}
-	js, err := nc.JetStream()
+	js, err := jetstream.New(nc)
 	if err != nil {
 		nc.Close()
 		return nil, nil, fmt.Errorf("jetstream: %w", err)
@@ -155,10 +157,17 @@ func (a *accountAuthenticator) accountFor(name string) (*server.Account, error) 
 // path with "/", and some test names contain spaces).
 var accountNameReplacer = strings.NewReplacer("/", "_", " ", "_")
 
-// accountNameFor derives a unique NATS account name for t. Go guarantees
-// t.Name() is unique among tests running in the same binary (subtests that
-// share a literal name get a "#NN" suffix), so it doubles as the account
-// key without needing a separate counter.
+// accountSeq disambiguates repeat runs of one test. t.Name() is unique among
+// tests in a binary but NOT across passes: -count=N replays identical names
+// inside the same TestMain, so a name-only account key hands the second pass
+// the first pass's JetStream namespace. That namespace still holds an ECR
+// signing key sealed with the first pass's master key, which StartGateway
+// regenerates per call — so the reused key failed to decrypt and took down
+// every gateway-starting test on the second pass.
+var accountSeq atomic.Uint64
+
+// accountNameFor derives a fresh NATS account name for t, so each gateway gets
+// an empty JetStream namespace no matter how often the test is replayed.
 func accountNameFor(t *testing.T) string {
-	return accountNameReplacer.Replace(t.Name())
+	return fmt.Sprintf("%s_%d", accountNameReplacer.Replace(t.Name()), accountSeq.Add(1))
 }

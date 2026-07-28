@@ -17,6 +17,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/mulgadc/spinifex/spinifex/qmp"
 	"github.com/mulgadc/spinifex/spinifex/types"
+	"github.com/mulgadc/spinifex/spinifex/utils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -655,7 +656,10 @@ func TestReboot_QMPFailureSurfacesError(t *testing.T) {
 // wired with the supplied QMP client. Used by AttachVolume rollback tests.
 func attachVolumeRunningInstance(t *testing.T, qmpClient *qmp.QMPClient, mounter VolumeMounter) (*Manager, *VM) {
 	t.Helper()
-	m := NewManagerWithDeps(Deps{VolumeMounter: mounter})
+	m := NewManagerWithDeps(Deps{
+		VolumeMounter:      mounter,
+		VolumeStateUpdater: &fakeVolumeStateUpdater{},
+	})
 	v := &VM{
 		ID:        "i-1",
 		Status:    StateRunning,
@@ -763,6 +767,67 @@ func TestAttachVolume_BlockdevAddFailure_TriggersUnmountOne(t *testing.T) {
 	assert.Equal(t, []string{"vol-1"}, mounter.unmountedOne)
 }
 
+// TestAttachVolume_PersistsStateBeforeDeviceAdd verifies the routing record is
+// durable before QEMU exposes the volume to the guest.
+func TestAttachVolume_PersistsStateBeforeDeviceAdd(t *testing.T) {
+	recorder := &qmpRecorder{}
+	qmpClient, cancel := newMockQMPClient(t, func(cmd qmp.QMPCommand) map[string]any {
+		recorder.record(cmd)
+		if cmd.Execute == "query-block" {
+			return map[string]any{"return": []qmp.BlockDevice{{
+				Inserted: &qmp.BlockInserted{},
+				QDev:     "/machine/peripheral/vdisk-vol-1/hotplug-ebs1/virtio-backend",
+			}}}
+		}
+		return nil
+	})
+	defer cancel()
+
+	var commandsAtUpdate []string
+	stateUpdater := &fakeVolumeStateUpdater{}
+	stateUpdater.onUpdate = func(update volumeStateUpdate) {
+		if update.State == "in-use" {
+			commandsAtUpdate = recorder.executes()
+		}
+	}
+	mounter := &fakeVolumeMounter{mountOneURI: "nbd:unix:/tmp/test.sock"}
+	m := NewManagerWithDeps(Deps{VolumeMounter: mounter, VolumeStateUpdater: stateUpdater})
+	m.Insert(&VM{ID: "i-1", Status: StateRunning, Instance: &ec2.Instance{}, QMPClient: qmpClient})
+
+	_, err := m.AttachVolume(t.Context(), "i-1", "vol-1", "/dev/sdf")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"object-add", "blockdev-add"}, commandsAtUpdate,
+		"in-use state must be durable before device_add makes the volume writable")
+	assert.Contains(t, recorder.executes(), "device_add")
+}
+
+// TestAttachVolume_StateUpdateFailurePreventsDeviceAdd verifies attachment
+// state is no longer best-effort: a failed write rolls back the backend before
+// the guest can access it.
+func TestAttachVolume_StateUpdateFailurePreventsDeviceAdd(t *testing.T) {
+	recorder := &qmpRecorder{}
+	qmpClient, cancel := newMockQMPClient(t, func(cmd qmp.QMPCommand) map[string]any {
+		recorder.record(cmd)
+		return nil
+	})
+	defer cancel()
+
+	stateErr := errors.New("predastore unavailable")
+	stateUpdater := &fakeVolumeStateUpdater{err: stateErr}
+	mounter := &fakeVolumeMounter{mountOneURI: "nbd:unix:/tmp/test.sock"}
+	m := NewManagerWithDeps(Deps{VolumeMounter: mounter, VolumeStateUpdater: stateUpdater})
+	m.Insert(&VM{ID: "i-1", Status: StateRunning, Instance: &ec2.Instance{}, QMPClient: qmpClient})
+
+	_, err := m.AttachVolume(t.Context(), "i-1", "vol-1", "/dev/sdf")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, stateErr)
+	assert.Equal(t, []string{"object-add", "blockdev-add", "blockdev-del", "object-del"}, recorder.executes())
+	assert.NotContains(t, recorder.executes(), "device_add")
+	assert.Equal(t, []string{"vol-1"}, mounter.unmountedOne)
+	require.Len(t, stateUpdater.snapshot(), 1)
+	assert.Equal(t, "in-use", stateUpdater.snapshot()[0].State)
+}
+
 // TestAttachVolume_DeviceAddFailure_BlockdevDelOK_Unmounts covers the
 // device_add-fail-then-rollback path where blockdev-del succeeds. The
 // rollback chain must run blockdev-del then UnmountOne in order.
@@ -781,7 +846,9 @@ func TestAttachVolume_DeviceAddFailure_BlockdevDelOK_Unmounts(t *testing.T) {
 	defer cancel()
 
 	mounter := &fakeVolumeMounter{mountOneURI: "nbd:unix:/tmp/test.sock"}
-	m, _ := attachVolumeRunningInstance(t, qmpClient, mounter)
+	stateUpdater := &fakeVolumeStateUpdater{}
+	m := NewManagerWithDeps(Deps{VolumeMounter: mounter, VolumeStateUpdater: stateUpdater})
+	m.Insert(&VM{ID: "i-1", Status: StateRunning, Instance: &ec2.Instance{}, QMPClient: qmpClient})
 
 	_, err := m.AttachVolume(t.Context(), "i-1", "vol-1", "/dev/sdf")
 	require.Error(t, err)
@@ -789,6 +856,11 @@ func TestAttachVolume_DeviceAddFailure_BlockdevDelOK_Unmounts(t *testing.T) {
 	assert.Equal(t, []string{"object-add", "blockdev-add", "device_add", "blockdev-del", "object-del"}, recorder.executes())
 	assert.Equal(t, []string{"vol-1"}, mounter.unmountedOne,
 		"successful blockdev-del rollback must be followed by UnmountOne")
+	calls := stateUpdater.snapshot()
+	require.Len(t, calls, 2)
+	assert.Equal(t, "in-use", calls[0].State)
+	assert.Equal(t, "available", calls[1].State,
+		"state returns to available only after the backend was removed and sealed")
 }
 
 // TestAttachVolume_DeviceAddFailure_BlockdevDelFails_SkipsUnmountOne
@@ -1252,6 +1324,47 @@ func TestDetachVolume_DeviceDeletedTimeout_FallsBackToRetry(t *testing.T) {
 	assert.Equal(t, "/dev/sdf", device)
 	assert.Equal(t, int32(2), blockdevAttempts.Load(),
 		"a missed DEVICE_DELETED event must still resolve via the bounded blockdev-del retry")
+}
+
+// TestDetachVolume_ConfirmedDeadQEMU_SkipsQMPAndSeals proves the
+// detach-wedges-when-QEMU-dies fix: when QEMU is provably gone (PID file
+// present, process dead), DetachVolume issues no QMP command — those steps
+// would only hang on the wedged process — and proceeds straight to the
+// ebs.unmount seal and the attachment clear.
+func TestDetachVolume_ConfirmedDeadQEMU_SkipsQMPAndSeals(t *testing.T) {
+	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+
+	var qmpCalled atomic.Bool
+	qmpClient, cancel := newMockQMPClientWithEvents(t, func(cmd qmp.QMPCommand, srv *mockQMPServer) map[string]any {
+		qmpCalled.Store(true)
+		return nil
+	})
+	defer cancel()
+
+	const id = "i-1"
+	require.NoError(t, utils.WritePidFile(id, 999999)) // PID file present but process dead
+
+	mounter := &fakeVolumeMounter{}
+	updater := &fakeVolumeStateUpdater{}
+	m := NewManagerWithDeps(Deps{VolumeMounter: mounter, VolumeStateUpdater: updater})
+	m.Insert(&VM{
+		ID:        id,
+		Status:    StateRunning,
+		Instance:  &ec2.Instance{},
+		QMPClient: qmpClient,
+		EBSRequests: types.EBSRequests{
+			Requests: []types.EBSRequest{{Name: "vol-1", DeviceName: "/dev/sdf"}},
+		},
+	})
+
+	device, err := m.DetachVolume(t.Context(), id, "vol-1", "", false)
+	require.NoError(t, err)
+	assert.Equal(t, "/dev/sdf", device)
+	assert.False(t, qmpCalled.Load(), "a confirmed-dead QEMU must receive no QMP command")
+	assert.Equal(t, []string{"vol-1"}, mounter.unmountedOne, "the ebs.unmount seal must still run")
+	calls := updater.snapshot()
+	require.Len(t, calls, 1, "the stale attachment must be cleared exactly once")
+	assert.Equal(t, "available", calls[0].State, "the volume must be returned to available")
 }
 
 // TestDetachVolume_BlockdevDelAlreadyRemoved_IdempotentSuccess covers the

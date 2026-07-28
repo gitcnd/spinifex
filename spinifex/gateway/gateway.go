@@ -550,15 +550,13 @@ func (gw *GatewayConfig) ErrorHandler(w http.ResponseWriter, r *http.Request, er
 	slog.Debug("ErrorHandler", "service", svc, "error", err.Error())
 
 	var requestId = uuid.NewString()
-	var errorMsg = awserrors.ErrorMessage{}
-
-	if _, exists := awserrors.ErrorLookup[err.Error()]; !exists {
+	code, exists := awserrors.ResolveErrorCode(err)
+	if !exists {
 		slog.Warn("Unknown error code", "error", err.Error())
-		err = errors.New(awserrors.ErrorInternalError)
+		code = awserrors.ErrorInternalError
 	}
 
-	errorMsg = awserrors.ErrorLookup[err.Error()]
-
+	errorMsg := awserrors.ErrorLookup[code]
 	if errorMsg.HTTPCode == 0 {
 		errorMsg.HTTPCode = 500
 	}
@@ -566,8 +564,8 @@ func (gw *GatewayConfig) ErrorHandler(w http.ResponseWriter, r *http.Request, er
 	// EKS, ECR, ACM, ECS, tagging, and bedrock/bedrock-runtime use AWS JSON 1.1;
 	// query/XML services fall through.
 	if svc == "eks" || svc == "ecr" || svc == "acm" || svc == "ecs" || svc == "tagging" || svc == "bedrock" || svc == "bedrock-runtime" {
-		body := GenerateEKSErrorResponse(err.Error(), errorMsg.Message, requestId)
-		slog.Debug("Generated JSON error response", "service", svc, "error", err.Error(), "json", string(body), "requestId", requestId)
+		body := GenerateEKSErrorResponse(code, errorMsg.Message, requestId)
+		slog.Debug("Generated JSON error response", "service", svc, "error", err, "code", code, "json", string(body), "requestId", requestId)
 		w.Header().Set("Content-Type", eksJSONContentType)
 		w.WriteHeader(errorMsg.HTTPCode)
 		if _, err := w.Write(body); err != nil {
@@ -578,12 +576,12 @@ func (gw *GatewayConfig) ErrorHandler(w http.ResponseWriter, r *http.Request, er
 
 	var xmlError []byte
 	if svc == "iam" || svc == "sts" || svc == "elasticloadbalancing" {
-		xmlError = GenerateIAMErrorResponse(err.Error(), errorMsg.Message, requestId)
+		xmlError = GenerateIAMErrorResponse(code, errorMsg.Message, requestId)
 	} else {
-		xmlError = GenerateEC2ErrorResponse(err.Error(), errorMsg.Message, requestId)
+		xmlError = GenerateEC2ErrorResponse(code, errorMsg.Message, requestId)
 	}
 
-	slog.Debug("Generated error response", "error", err.Error(), "xml", string(xmlError), "requestId", requestId)
+	slog.Debug("Generated error response", "error", err, "code", code, "xml", string(xmlError), "requestId", requestId)
 
 	w.Header().Set("Content-Type", "application/xml")
 	w.WriteHeader(errorMsg.HTTPCode)
@@ -608,23 +606,17 @@ func readQueryArgs(r *http.Request) (map[string]string, error) {
 // ParseAWSQueryArgs parses an AWS query-protocol body. Returns an error on
 // invalid percent-encoding so callers can surface MalformedQueryString.
 func ParseAWSQueryArgs(query string) (map[string]string, error) {
-	params := make(map[string]string)
-	pairs := strings.SplitSeq(query, "&")
-	for pair := range pairs {
-		kv := strings.SplitN(pair, "=", 2)
-		key, err := url.QueryUnescape(kv[0])
-		if err != nil {
-			return nil, fmt.Errorf("invalid URL encoding in parameter name: %w", err)
-		}
-		if len(kv) == 2 {
-			value, err := url.QueryUnescape(kv[1])
-			if err != nil {
-				return nil, fmt.Errorf("invalid URL encoding in value for %q: %w", key, err)
-			}
-			params[key] = value
-		} else {
-			params[key] = ""
-		}
+	values, err := url.ParseQuery(query)
+	if err != nil {
+		return nil, fmt.Errorf("invalid AWS query string: %w", err)
+	}
+
+	params := make(map[string]string, len(values))
+	for key, vs := range values {
+		// The query protocol indexes repeated parameters (Filter.1.Value.1), so a
+		// bare duplicate key only arrives from a non-conforming client. Take the
+		// last occurrence.
+		params[key] = vs[len(vs)-1]
 	}
 	return params, nil
 }
