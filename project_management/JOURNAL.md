@@ -140,6 +140,33 @@ Next (for whoever picks up remediation, NOT this chat): work the
 SECURITY_AUDIT_PRELIMINARY.md priority queue, reproduce each item before
 fixing. OPS-1 (rotate the working-tree token) is a human action.
 
+## 2026-07-28 02:10 -- VHOST-USER-BLK BACKEND WORKS END-TO-END IN-PROCESS
+Plan: continue the decision-free frontier while F2 waits (human query
+02:36 confirmed: keep moving).
+Done:
+- vhost-user-blk backend daemon implemented (viperblock
+  feat/data-path-vhost-user-blk commit fb656eb, pushed): full message
+  loop, memfd mmap of guest regions, eventfd kick/call, single-queue
+  service goroutine, virtio-blk IN/OUT/FLUSH/GET_ID against a pluggable
+  BlockEngine interface (satisfied by *viperblock.VB and by test fakes).
+- Functional test that plays QEMU's role IN-PROCESS: full vhost-user
+  negotiation over a unix socket with a real memfd, real split rings,
+  real eventfds; then write-4KiB / read-back-verify / flush-reaches-
+  engine. Green first run, 31 ms. No QEMU needed for this layer.
+- Long-drain race chain interim: pre-fix leg 0/10 hits even with
+  faithful 400 MB bursts -- the wild race needs rarer timing; post-fix
+  leg finishing ~03:00 (tracked). Verification conclusion from 20:15
+  stands unchanged.
+Failed/learned: nothing new; the codec/ring layers from the previous
+  slice needed zero changes to support the daemon -- the synthetic-
+  memory unit tests carried their weight.
+Metrics: backend + test ~700 lines; functional test 31 ms.
+Fork movement: F7 build advancing (P-1.9 remainder needs the in-guest
+  fio comparison next).
+Next: wire *viperblock.VB as the engine + a serve command; QEMU smoke
+  test in the rig VM (vhost-user-blk-pci + memory-backend-memfd); then
+  in-guest fio NBD-vs-vhost (ticks P-1.9, decides F7).
+
 ## 2026-07-27 20:15 -- RACE FIX VERIFICATION CLOSED HONESTLY: REPRODUCER
 ##                     TOO WEAK TO DIFFERENTIATE; FIX STANDS ON MECHANISM
 Plan: process the pre-fix race leg results.

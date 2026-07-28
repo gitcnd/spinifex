@@ -2,7 +2,7 @@
 
 <!-- Overwrite-in-place. History lives in JOURNAL.md. -->
 
-Last updated: 2026-07-27 16:20 (OVERNIGHT MODE: chain running -- s3-tests
+Last updated: 2026-07-28 02:15 (vhost-user-blk backend works end-to-end in-process; P-1.7 frozen; long-drain race chain finishing)
 v3 baseline, then automated NBD-race pre/post verification, then cluster
 shutdown; regression-runner validation also running; vhost-user codec +
 virtqueue slice landed with green unit tests)
