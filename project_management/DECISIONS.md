@@ -56,9 +56,9 @@ Revisit trigger: human answer.
 Escalation path: proceed under (a) if delegated.
 
 ## F2 -- Durability architecture for acknowledged writes  [MAJOR]
-Status: LEANING (b) synchronous peer WAL replication (2026-07-27, on
-  P-1.4 prototype numbers below; MAJOR, so human ack still required to
-  move to DECIDED)
+Status: DECIDED (2026-07-28, human ack verbatim: "Lets go the way
+  you're leaning with F22 - (b) sounds best, and now we can keep
+  moving!" -- "F22" read as F2, option (b))
 Decision: (pending human ack) option (b): ack = local WAL write +
   synchronous replication to a peer node's WAL (group-commit fsync on
   both), promote-on-failure. Option (c) per-write predastore PUTs is

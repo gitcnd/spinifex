@@ -140,6 +140,33 @@ Next (for whoever picks up remediation, NOT this chat): work the
 SECURITY_AUDIT_PRELIMINARY.md priority queue, reproduce each item before
 fixing. OPS-1 (rotate the working-tree token) is a human action.
 
+## 2026-07-28 03:05 -- F2 ACKED BY HUMAN; PHASE 1 OPENED WITH THE DURABLE
+##                     FLUSH BARRIER (P1.4 SLICE 1)
+Plan: record the human's F2 ack and start Phase 1 with the thinnest
+verifiable slice.
+Done:
+- F2 DECIDED: human ack verbatim in DECISIONS.md ("Lets go the way
+  you're leaning with F22 - (b) sounds best, and now we can keep
+  moving!"). Synchronous peer WAL replication is the architecture;
+  Phase 1 implementation unblocked.
+- P1.4 slice 1 LANDED (viperblock feat/replicated-wal-durability commit
+  f2f267d, pushed): SyncOnFlush option -- Flush() fsyncs the active WAL
+  (or dirty shards) via a new error-returning syncWALForBarrier before
+  acknowledging the barrier; enabled in the nbdkit plugin (guest fsync
+  now power-loss durable on the serving path). Behavioural tests assert
+  the dirty-flag contract with the background syncer disabled; FULL
+  engine suite green on the branch (viperblock 181.6 s, all packages).
+- Design choice recorded in the flag's doc comment: opt-in rather than
+  default-on so embedders keep their timing; serving entrypoints enable
+  it; F2 replication extends the same barrier hook.
+Failed/learned: none this slice.
+Metrics: slice ~140 lines incl. tests; full suite 187 s wall.
+Fork movement: F2 LEANING -> DECIDED (human ack).
+Next: F2 slice 2 -- the replication transport (peer daemon speaking the
+group-commit protocol prototyped in proto/f2walrepl, wired into
+syncWALForBarrier); strace re-verification of the served path once the
+long-drain chain frees the cluster.
+
 ## 2026-07-28 02:10 -- VHOST-USER-BLK BACKEND WORKS END-TO-END IN-PROCESS
 Plan: continue the decision-free frontier while F2 waits (human query
 02:36 confirmed: keep moving).

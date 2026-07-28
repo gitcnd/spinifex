@@ -204,8 +204,17 @@ that must meet them -- never after the implementation.
 - [ ] P1.3 Performance regression bounded: fio suite within a tolerance of
       the P-1.5 frozen baseline (tolerance set from P-1.4 measurements +
       human ack on the latency/durability trade; from baseline).
-- [ ] P1.4 WAL fsync semantics: guest FLUSH (NBD flush) is a durable
+- [~] P1.4 WAL fsync semantics: guest FLUSH (NBD flush) is a durable
       barrier under all configurations, asserted by a dedicated test.
+      -> slice 1 (2026-07-28): SyncOnFlush landed (viperblock
+      feat/replicated-wal-durability commit f2f267d): Flush fsyncs the
+      active WAL (error-returning barrier sync, both legacy + sharded),
+      enabled in the nbdkit plugin; behavioural tests assert the
+      dirty-flag contract both ways; full engine suite green (181 s).
+      REMAINING (the only remaining content of this box): strace
+      re-verification through a served volume (blocked until the
+      cluster frees), the volatile-cache FUSE loss-count rig, and the
+      barrier extending over F2 peer replication when it lands.
 - [ ] P1.5 Human notified: Phase 1 checkpoint review.
 
 ## Phase 2 -- EBS-grade backing store (Predastore)

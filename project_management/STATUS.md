@@ -2,11 +2,11 @@
 
 <!-- Overwrite-in-place. History lives in JOURNAL.md. -->
 
-Last updated: 2026-07-28 02:15 (vhost-user-blk backend works end-to-end in-process; P-1.7 frozen; long-drain race chain finishing)
+Last updated: 2026-07-28 03:10 (F2 ACKED and DECIDED; Phase 1 opened -- durable Flush barrier landed with green suite; vhost-user backend working in-process)
 v3 baseline, then automated NBD-race pre/post verification, then cluster
 shutdown; regression-runner validation also running; vhost-user codec +
 virtqueue slice landed with green unit tests)
-Current phase: Phase -1 (de-risk and baseline), 5/9 [x], 2/9 [~]
+Current phase: Phase -1 nearly done (5/9 [x], 2/9 [~]) + Phase 1 OPENED (P1.4 [~])
 Current slice: F7 vhost-user skeleton (viperblock commit a783271):
 protocol codec + split-ring parsing, 5 unit tests, no QEMU needed yet.
 Overnight chain artifacts will land in /tmp/overnight/ (chain.log,
@@ -20,11 +20,9 @@ Nothing blocking. Non-blocking queue:
 1. REVIEW: F0/F1 closed by your delegation (DECISIONS.md) -- Outposts
    parity = service-set first then thin outposts.* API; "predastore as
    EBS" = harden the whole Viperblock+Predastore stack. Object if wrong.
-1a. ACK REQUESTED (MAJOR fork F2): adopt synchronous peer WAL
-   replication as the acked-write durability mechanism. Evidence: it
-   costs +3 us over the local fsync we need anyway; the alternative
-   (per-write predastore PUTs) measured 14-52x worse (DECISIONS.md F2).
-   A "go" here unlocks Phase 1 implementation.
+1a. RESOLVED 2026-07-28: F2 ACKED by human ("(b) sounds best") --
+   synchronous peer WAL replication is DECIDED. Phase 1 implementation
+   unblocked and started (first slice: durable Flush barrier, P1.4).
 2. RESOLVED 2026-07-27 07:45: human granted the token read+write on
    gitcnd/{spinifex,viperblock,predastore}; all storage branches + the
    v1.13.0 tag pushed to gitcnd/viperblock and gitcnd/predastore.
