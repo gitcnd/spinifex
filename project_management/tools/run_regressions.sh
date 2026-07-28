@@ -84,6 +84,22 @@ else
   run_suite predastore-unit 900 env -C "$PREDASTORE_DIR" go test -count=1 ./...
 fi
 
+# s3tests-subset: ~1 min S3-surface smoke via the curated passing subset
+# (predastore tools/s3tests/regression_subset.txt). The helper owns the
+# loopback-cluster lifecycle and exits 3 to signal SKIP (rig absent, or a
+# foreign dev cluster is running). Runs after predastore-unit so fixture
+# ports are free. Added 2026-07-29 (gate P0.2's s3-tests leg).
+started=$SECONDS
+"$PROJECT_TOOLS_DIR/s3tests_subset.sh" > /tmp/regress-s3tests-subset.log 2>&1
+s3subset_rc=$?
+if [ "$s3subset_rc" = 0 ]; then
+  record s3tests-subset PASS $((SECONDS-started))
+elif [ "$s3subset_rc" = 3 ]; then
+  record s3tests-subset SKIP $((SECONDS-started)) "$(tail -1 /tmp/regress-s3tests-subset.log)"
+else
+  record s3tests-subset FAIL $((SECONDS-started)) "log: /tmp/regress-s3tests-subset.log"
+fi
+
 # crashharness-smoke: 2 SIGKILL cycles through the public API. The harness
 # lives on the feat/crash-consistency-harness branch; use a dedicated
 # worktree so this suite does not depend on whichever branch the main

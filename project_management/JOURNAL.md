@@ -140,6 +140,68 @@ Next (for whoever picks up remediation, NOT this chat): work the
 SECURITY_AUDIT_PRELIMINARY.md priority queue, reproduce each item before
 fixing. OPS-1 (rotate the working-tree token) is a human action.
 
+## 2026-07-29 (overnight) -- P1.6 SLICE 4 (PIPELINED DRAIN), VB-1 FIXED,
+##                     P0.2 TICKED (7/7 RUNNER WITH S3-TESTS SUBSET)
+Plan: human asleep; work the STATUS queue autonomously (protocol 09).
+Done, in order, each committed+pushed before the next:
+- P1.6 SLICE 4 (viperblock fix/backpressure-write-admission-latency,
+  e916f68 + evidence c9ed442): DrainToBackendCtx now interleaves
+  bounded 64 MiB flush slices with segment rotation + chunk upload, so
+  blocked writers get per-chunk headroom DURING the flush phase.
+  flushBatchedLegacy takes a budget; drainFlushRound wraps it under
+  flushMu; entry-snapshot round budget bounds the drain. Differential
+  gate: the OLD algorithm (emulated exactly via a one-giant-round
+  override) FAILS at 1.007-1.104 s admission; pipelined rounds pass at
+  66 ms (engagement proven by watermark crossing -- a latency floor
+  would reject the success mode). Suite green 181 s.
+- SLICE 4 VERIFICATION HONESTY: first in-guest boot measured WORSE
+  (50.9 s clat max; prefill 1.9 MB/s vs 201 MB/s). Enumerated causes,
+  then discriminated: host-side probe (temp test, deleted) showed
+  throughput UNCHANGED (253 vs 264 MiB/s) and worst-single-write 2.8x
+  BETTER; same-boot A/B guest (two binaries, two volumes) initially
+  reproduced the prefill asymmetry, then REVERSED it on a controlled
+  rewrite pass (slice4 7.4 vs pre 4.5 MB/s) and split the diag rounds
+  (slice4 won round 1). Verdict: ambient variance (up to 100x swings
+  on identical builds), not a regression; slice 4 stands on the unit
+  differential + neutral-to-better controlled comparisons. Named for
+  the gate: final bound needs repeated runs or a quieter host;
+  saturated-overwrite drain throughput is a separate lever.
+- VB-1 FIXED (CRITICAL, viperblock feat/replicated-wal-durability
+  commit 35476e1): Close no longer deletes the local WAL after a
+  failed WAL-to-chunk consolidation. Differential: the committed
+  runtime reproducer pre-fix lost the flushed block (ZERO BLOCK,
+  0 WAL files left); post-fix 2 WAL files survive and reopen recovers
+  the data. In-tree regression test added (close_failed_drain_test.go,
+  fault-injected chunk writes; pre-fix run FAILS). Full suite green
+  171 s. SECURITY_AUDIT_PRELIMINARY.md updated. Repro module re-tidied
+  for v1.14 deps (replace restored to the main clone).
+- P0.2 TICKED: s3-tests subset added to the regression runner --
+  curated 7-test passing smoke (predastore tools/s3tests/
+  regression_subset.txt, calibrated live tonight against the merged
+  cluster), helper script owns loopback-cluster lifecycle (SKIPs when
+  rig absent or a foreign cluster runs; graceful-stop wait + pkill -x
+  backstop after observing stop.sh's async shutdown linger ~1 min).
+  s3-tests venv rebuilt (was ephemeral). Full runner validated 7/7
+  PASS ~6 min (incl. the flaky upstream daemon test passing this
+  round).
+Failed/learned:
+- In-guest single-run latency maxima on this host are NOT decision-
+  grade: identical builds swung 100x between boots. Same-run A/B or
+  repeated runs only (ENVIRONMENT trap generalizes beyond fsync).
+- "queue started" appearing twice per boot is NORMAL (BIOS + kernel
+  virtio negotiation), banked before it became a false reconnect lead.
+- pgrep prints PIDs on match: `pgrep -x s3d || echo CLEAN` output was
+  misread once; the runner's own guards caught the truth (cluster
+  shutdown is async after stop.sh).
+Not done (deliberately): the s3-backed nbdkit-vs-vhost production pair
+-- tonight's ambient noise makes single-run guest numbers low-value;
+queued behind quieter-host/repeated-run methodology (STATUS).
+Metrics: overnight ~4 h wall; 3 full viperblock suites (~180 s each),
+2 guest boots + A/B legs, 1 full 7-suite runner (~6 min).
+Fork movement: none (P1.6 advanced within F7's plan).
+Next: morning review items in STATUS NEEDS-HUMAN; then P1.6 bound
+proposal from repeated runs, F2 promotion slice, s3 production pair.
+
 ## 2026-07-28 15:45 -- POST-MERGE REGRESSION: 5/6 + TWO ATTRIBUTED
 ##                     FINDINGS (RUNNER FIPS GAP FIXED; UPSTREAM FLAKE)
 Plan: post-upstream-sync regression run, triage anything red.

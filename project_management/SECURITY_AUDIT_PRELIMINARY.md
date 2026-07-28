@@ -560,7 +560,12 @@ Confirm-then-fix each; write the repro before the fix.
 
 1. OPS-1  RESOLVED NO-OP 2026-07-28 (human: fork-scoped token, revoked
           after the work; merge-back reviewed). No action.
-2. VB-1   Close-after-failed-drain data loss (CRITICAL, durability).
+2. VB-1   FIXED 2026-07-28/29 on viperblock feat/replicated-wal-durability
+          (commit 35476e1): Close keeps local WAL files when WAL-to-chunk
+          consolidation fails; reopen recovers. Differential-validated
+          against the runtime reproducer (pre-fix: ZERO BLOCK; post-fix:
+          data survives) + in-tree regression test
+          (close_failed_drain_test.go). Full suite green.
 3. PD-1 + PD-2  mutual TLS on QUIC + Raft (CRITICAL, or document the
          trusted-network requirement explicitly as an interim).
 4. SP-4   close the authorization fail-open branches.

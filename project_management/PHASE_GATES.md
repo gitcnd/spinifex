@@ -207,9 +207,18 @@ that must meet them -- never after the implementation.
 - [ ] P0.1 Sibling clones of viperblock + predastore wired via go.work
       (scripts/clone-deps.sh); `make build` + `make test` green against
       local replaces; one-command build documented in ENVIRONMENT.md.
-- [ ] P0.2 One-command regression runner exists covering: spinifex unit +
+- [x] P0.2 One-command regression runner exists covering: spinifex unit +
       integration, viperblock tests, predastore tests, crash harness smoke,
       s3-tests subset; one PASS/FAIL line per suite + tally; runtimes noted.
+      -> COMPLETE (2026-07-29 overnight): project_management/tools/
+      run_regressions.sh, 7 suites incl. the new s3tests-subset (curated
+      7-test passing smoke, predastore tools/s3tests/regression_subset.txt;
+      helper owns loopback-cluster lifecycle, SKIPs when rig absent or a
+      foreign cluster runs). Validated 7/7 PASS in ~6 min (36+26+1+179+
+      68+42+6 s). Runner history: built + validated 2026-07-27 (4 suites
+      + skip-guard), GOFIPS140 added post-v1.14.0-merge, s3tests leg
+      added tonight. Known flake: upstream daemon test (STATUS item 6)
+      fails ~10-20% of runs -- attributed, upstream-reportable.
 - [ ] P0.3 Golden-response harness: capture AWS CLI request/response pairs
       against Spinifex for the EBS action set; diff tool against botocore
       model expectations (fork F4). Gate: every currently-implemented EBS
@@ -292,13 +301,24 @@ that must meet them -- never after the implementation.
       2026-07-28_p16_slice2_slice3_flush_and_fsync.txt): clat max
       246 s -> 35.3 s -> 31.6 s -> 16.3 s; diag steady IOPS 329 ->
       3440; p99 65-76 us throughout; raw control unchanged.
-      REMAINING (the only remaining content of this box): slice 4 --
-      a blocked writer cannot be released until the in-flight drain's
-      whole FLUSH phase completes (pendingBytes decrements only per
-      uploaded chunk; DrainToBackendCtx is flush-everything THEN
-      upload). Fix shape: pipeline chunk assembly/upload with the
-      batched flush. Then set the final numeric bound (100 ms-class
-      target) with the human and re-run the rig.
+      -> SLICE 4 DONE (2026-07-29 overnight, commits e916f68 + c9ed442):
+      pipelined drain rounds -- DrainToBackendCtx interleaves bounded
+      64 MiB flush slices with rotation+chunk+upload. Differential gate
+      (drain_pipeline_test.go, old algorithm emulated exactly by a
+      one-giant-round override): old FAILS at 1.007-1.104 s admission,
+      pipelined passes at 66 ms; host throughput unchanged (253 vs 264
+      MiB/s) with 2.8x better worst single write; in-guest same-boot
+      A/B equal-or-better for slice 4 after ambient-variance triage
+      (artifact viperblock/results/2026-07-28_p16_slice4_pipelined_
+      drain.txt). Full suite green.
+      REMAINING (the only remaining content of this box): (a) final
+      bound-setting rig runs need repeated measurements or a quieter
+      host -- single-run in-guest latency maxima on this machine are
+      not decision-grade (measured swings up to 100x on identical
+      builds); propose the numeric bound to the human from repeated
+      runs; (b) saturated-OVERWRITE drain throughput (4-7 MB/s both
+      builds, chunk-supersede bookkeeping) is a separate named lever,
+      not part of this gate.
 
 ## Phase 2 -- EBS-grade backing store (Predastore)
 

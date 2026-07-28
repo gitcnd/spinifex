@@ -2,16 +2,16 @@
 
 <!-- Overwrite-in-place. History lives in JOURNAL.md. -->
 
-Last updated: 2026-07-28 15:15 (UPSTREAM SYNC: all three repos merged
-to mulgadc v1.14.0, conflicts resolved, suites green, post-merge
-regression run in flight; note upstream landed its own sharded RMW
-write locking in WriteAtCtx -- relevant to the F7 concurrency
-qualifier. Before that: P1.6 slices 2+3a, clat max 246 s -> 16.3 s)
-Current phase: Phase -1 nearly done (6/9 [x], 1/9 [~]) + Phase 1 OPEN
-(P1.1 [~], P1.4 [~], P1.6 [~])
-Current slice: NEXT = P1.6 slice 4: pipeline the drain (consume
-flushed batches into chunks immediately so blocked writers see
-headroom during, not after, the flush phase); then final bound + rig.
+Last updated: 2026-07-29 overnight (P1.6 slice 4 pipelined drain DONE
+with differential validation; VB-1 CRITICAL data-loss FIXED with
+pre/post reproducer; P0.2 TICKED -- 7/7 runner incl. new s3-tests
+subset; all pushed, machine clean -- morning review items below)
+Current phase: Phase -1 nearly done (6/9 [x], 1/9 [~]) + P0 1/4 [x]
++ Phase 1 OPEN (P1.1 [~], P1.4 [~], P1.6 [~] slices 1-4 done)
+Current slice: NEXT = P1.6 final bound proposal from REPEATED rig runs
+(single-run in-guest maxima proved non-decision-grade: 100x ambient
+swings on identical builds); then F2 promotion/reconnect slice; then
+the s3-backed nbdkit-vs-vhost production pair.
 
 ## NEEDS HUMAN
 
@@ -67,6 +67,22 @@ overlaps Phase 1 durability work and should be fixed on that branch.
   - feat/shard-healer-and-read-repair: availability probe + P-1.6
     baseline + s3-tests rig + P-1.7 frozen baseline. ACTIVE for Phase 2.
   - feat/s3-api-surface-completion: created, no commits yet (Phase 2).
+
+## What landed 2026-07-29 overnight (10th drop): slice 4 + VB-1 + P0.2
+- P1.6 slice 4 (pipelined drain rounds): differential-validated (old
+  algorithm 1.0-1.1 s admission FAIL vs 66 ms PASS), host throughput
+  unchanged, in-guest same-boot A/B equal-or-better; honest variance
+  triage journaled (first boot looked WORSE -- ambient, disproven by
+  controlled comparisons). viperblock commits e916f68 + c9ed442.
+- VB-1 CRITICAL fixed on the durability branch (35476e1): Close keeps
+  the local WAL when chunk consolidation fails; reproducer pre/post
+  differential + in-tree regression test; suite green.
+- P0.2 [x]: regression runner now 7 suites incl. curated s3-tests
+  subset (7/7 validated, ~6 min); s3-tests venv rebuilt; helper owns
+  cluster lifecycle safely.
+- Deferred deliberately: s3-backed nbdkit-vs-vhost pair (ambient noise
+  makes single-run guest numbers low-value; needs repeated-run
+  methodology).
 
 ## What landed 2026-07-28 (9th drop): upstream sync to v1.14.0
 - All three repos merged to mulgadc v1.14.0 and pushed (spinifex 56
@@ -164,35 +180,32 @@ overlaps Phase 1 durability work and should be fixed on that branch.
 - P-1.7 [x]: s3-tests baseline frozen 123/621/94 (Phase 2 floor).
 
 ## Next action
-1. P1.6 slice 4 (the F7 critical path continues): pipeline the drain
-   -- consume flushed batches into chunk assembly/upload immediately
-   (or equivalent incremental hand-off in WriteWALToChunk) so a
-   writer blocked at the watermark sees per-chunk headroom DURING the
-   flush phase instead of after it (evidence: 16.3 s residual clat
-   max == flush-phase length; see 8th drop). Then re-run the vhost
-   rig, set the final 100 ms-class bound with the human, and run the
-   deferred s3-backed nbdkit-vs-vhost production pair.
-2. F2 next slice: promotion/recovery from replica WALs, reconnect/
+1. P1.6 final verification: repeated-run rig methodology (5+ runs per
+   build, report distribution of clat max) on a quiet window; propose
+   the numeric bound to the human. Also name-check the separate
+   saturated-overwrite drain-throughput lever (4-7 MB/s both builds).
+2. The deferred s3-backed nbdkit-vs-vhost production pair (same
+   repeated-run methodology).
+3. F2 next slice: promotion/recovery from replica WALs, reconnect/
    resync, degraded-mode policy; then close the acked-but-unflushed
    memory window (14.2% measured) via replicate-on-WriteAt or
    WAL-on-ack.
-3. Phase 2 (predastore) when opened: healer + read-repair + degraded/
+4. Phase 2 (predastore) when opened: healer + read-repair + degraded/
    quorum writes + metadata failover (P-1.6: 1 node down = writes 0%,
    reads 100% but ~2320x slower); then the S3 surface gaps (CopyObject,
    DeleteObjects, AbortMultipartUpload over HTTP, versioning).
-4. Backlog: P-1.2 single-node VM deploy (rig VM ready at
+5. Backlog: P-1.2 single-node VM deploy (rig VM ready at
    ../vm-images/rig-node1.qcow2, key rig_ssh_key); volatile-cache FUSE
    loss-count rig (P1.4 remainder); P0.3 golden-response harness;
-   drain-stall fix (Phase 1 target, from P-1.5: writes stall minutes
-   under sustained load); s3-tests subset suite into the regression
-   runner (P0.2 remainder); VB-1 security fix on the durability branch.
+   saturated-overwrite drain throughput (named 2026-07-29); branch
+   consolidation: merge fix/backpressure-write-admission-latency +
+   feat/replicated-wal-durability when Phase 1 integration starts.
 
 ## Gate snapshot
 Phase -1: 6/9 [x] (P-1.1, P-1.3, P-1.4, P-1.5, P-1.7, P-1.9) + 1/9 [~]
-(P-1.6) + open: P-1.2, P-1.8 . P0: 0/4 ticked (P0.2 runner exists,
-validated 6/6 today; s3-tests subset still missing) . P1: 3/6 [~]
-(P1.1, P1.4, P1.6 slice 1 done) . P2: 0/5 . P3: 0/6 . P4: 0/6 .
-P5: 0/4
+(P-1.6) + open: P-1.2, P-1.8 . P0: 1/4 [x] (P0.2 runner, 7 suites,
+validated 7/7) . P1: 3/6 [~] (P1.1, P1.4, P1.6 slices 1-4 done) .
+P2: 0/5 . P3: 0/6 . P4: 0/6 . P5: 0/4
 
 ## Standing reminders
 - ALL go commands: GOTOOLCHAIN=auto. Baselines additionally GOWORK=off.
