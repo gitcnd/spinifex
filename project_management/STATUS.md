@@ -2,26 +2,22 @@
 
 <!-- Overwrite-in-place. History lives in JOURNAL.md. -->
 
-Last updated: 2026-07-28 evening (P1.6 verification COMPLETE both
-backends: file 5-run clat max 41-67 ms, s3 production pair 27.6-109.3
-ms with vhost p99 2x better than nbdkit on the REAL engine; 250 ms
-bound PROPOSED -- your ack is NEEDS-HUMAN item 1. F7 production-pair
-evidence complete.)
+Last updated: 2026-07-28 late (P1.6 CLOSED [x] -- bound acked, harness
+committed, closing run PASS 91.8 ms worst vs 250 ms. F2 PROMOTION
+slice LANDED: flushed writes survive primary loss via replica WALs
+alone. Next: reconnect/resync + acked-unflushed window.)
 Current phase: Phase -1 nearly done (6/9 [x], 1/9 [~]) + P0 1/4 [x]
-+ Phase 1 OPEN (P1.1 [~], P1.4 [~], P1.6 [~] verification done,
-bound ack pending)
-Current slice: NEXT = F2 promotion/reconnect slice (replica-WAL
-recovery, resync, degraded-mode policy) + the acked-unflushed window.
++ Phase 1 OPEN (P1.6 [x]; P1.1 [~] promotion done, P1.4 [~])
+Current slice: F2 continued -- reconnect/resync after replica loss,
+degraded-mode policy, then the acked-unflushed window (14.2%) via
+replicate-on-WriteAt or WAL-on-ack.
 
 ## NEEDS HUMAN
 
 Nothing blocking. Non-blocking queue:
-1. ACK REQUESTED (P1.6 bound): freeze the gate assertion as "no single
-   4 KiB write under sustained saturation exceeds 250 ms across a
-   repeated-run distribution" -- measured maxima 67 ms (file backend,
-   5 runs) and 109.3 ms (s3/predastore, 6 legs), i.e. 2.3-3.7x margin.
-   Evidence: viperblock/results/2026-07-28_p16_repeated_run_
-   distribution.txt + ..._p16_phaseB_s3_production_pair.txt.
+1. RESOLVED 2026-07-28: P1.6 bound ACKED (verbatim in the gate note);
+   encoded as tests/p16latencygate/run.sh, closing run PASS (worst leg
+   91.8 ms vs 250 ms). GATE P1.6 [x].
 2. REVIEW (standing): F0/F1 were closed by delegated judgment call
    (DECISIONS.md) -- Outposts parity = service-set first then thin
    outposts.* API; "predastore as EBS" = harden the whole

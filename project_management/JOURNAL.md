@@ -140,6 +140,45 @@ Next (for whoever picks up remediation, NOT this chat): work the
 SECURITY_AUDIT_PRELIMINARY.md priority queue, reproduce each item before
 fixing. OPS-1 (rotate the working-tree token) is a human action.
 
+## 2026-07-28 late -- P1.6 CLOSED (BOUND ACKED + HARNESS PASS 91.8 ms);
+##                     F2 PROMOTION SLICE LANDED
+Plan: record the human's P1.6 bound ack, encode + close the gate, then
+start the F2 promotion slice.
+Done:
+- P1.6 ack recorded verbatim in the gate note; bound encoded as a
+  COMMITTED harness (viperblock tests/p16latencygate/run.sh on the fix
+  branch, commit 7029811): builds the serve binary, boots the rig
+  guest, runs 5 x 30 s saturated legs, asserts every leg's clat max <=
+  250 ms, one grep-able verdict line. Closing run PASS: legs
+  48.0/68.3/89.1/91.8/91.7 ms (worst 91.8 ms, 2.7x margin). Gate [x].
+  Harness notes: REPO_DIR must point at a tree containing both the
+  engine fixes and vhostuser until the Phase-1 integration merge; two
+  first-run bugs fixed (REPO_DIR env not honored; branch lacked
+  vhostuser).
+- F2 PROMOTION SLICE (durability branch commit 759c101):
+  walrepl.ListReplicaWALFiles (walrepl owns its replica-file naming) +
+  viperblock.InstallRecoveryWALFiles (engine owns the recovery layout;
+  durable copies, EMPTY-target guard so promotion can never mix into a
+  live volume) + TestPromotionRecoversFlushedWritesFromReplicaWALs:
+  primary with a live walrepl replica writes 64 blocks + 16 rewrites,
+  flushes (barrier), then DIES (local state os.RemoveAll'd, never
+  closed); a fresh VB over the same backend, seeded only with the
+  replica's WAL files, recovers everything -- rewrites resolved by
+  SeqNum dedup. The acked-but-unflushed write is asserted LOST with a
+  pointer to the next slice (the 14.2% window). Race-green; full suite
+  green 170 s.
+Failed/learned:
+- My own zero-block sentinel contract bit my test (ReadAt of a
+  never-written region returns ErrZeroBlock WITH valid zero data) --
+  the same semantics I adapter-documented for vhost. Caught by the
+  test's last assertion; fixed with ErrorIs checks.
+Metrics: gate harness run 11.3 min end-to-end; promotion slice ~250
+lines incl. test; suite 170 s.
+Fork movement: F2 promotion leg landed (fork stays DECIDED; P1.1 note
+updated).
+Next: F2 reconnect/resync + degraded-mode policy; then the
+acked-unflushed window design (replicate-on-WriteAt vs WAL-on-ack).
+
 ## 2026-07-28 evening -- P1.6 VERIFIED BOTH BACKENDS (250 ms BOUND
 ##                     PROPOSED); F7 PRODUCTION PAIR MEASURED
 Plan: STATUS next-action 1+2 -- repeated-run verification, then the

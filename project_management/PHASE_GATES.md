@@ -234,15 +234,22 @@ that must meet them -- never after the implementation.
       -> transport slice DONE (2026-07-28, viperblock commit a298ca7):
       walrepl package (ordered streaming, group-commit fsync replica,
       cumulative acks, WAL-header handshake so replica files are valid
-      WAL files) wired into WriteWAL + the Flush barrier; broken replica
+      WAL files)       wired into WriteWAL + the Flush barrier; broken replica
       fails the barrier (fail-closed). Byte-exact replica==primary WAL
-      test green through a real barrier; full suite green. REMAINING
-      (the only remaining content of this box): promotion/recovery from
-      replica WALs, reconnect/resync, degraded-mode policy, the
+      test green through a real barrier; full suite green.
+      -> PROMOTION SLICE DONE (2026-07-28 late, commit 759c101):
+      walrepl.ListReplicaWALFiles + viperblock.InstallRecoveryWALFiles
+      (durable copy, empty-target guard) + promotion test: a fresh VB
+      over the same backend, seeded ONLY with replica WAL files
+      (primary local state destroyed, never closed), recovers ALL 64
+      flushed blocks with rewrites resolved by SeqNum; the
+      acked-unflushed write is documented lost in-test (the known
+      14.2% window). Full suite green 170 s.
+      REMAINING (the only remaining content of this box):
+      reconnect/resync after replica loss, degraded-mode policy, the
       500-crash harness run against the replicated configuration, and
-      the acked-UNFLUSHED window (memory buffer) which replication does
-      not yet cover -- that needs replicate-on-WriteAt or WAL-on-ack,
-      a design point for the next slice.
+      the acked-UNFLUSHED window (replicate-on-WriteAt or WAL-on-ack
+      -- next slice's design point).
 - [ ] P1.2 Node-loss survival: with the F2 mechanism active, hard-kill the
       primary storage node; volume resumes on a peer with zero acknowledged
       writes lost. Oracle: pattern read-back.
@@ -264,13 +271,18 @@ that must meet them -- never after the implementation.
       box): the volatile-cache FUSE loss-count rig, and the barrier
       extending over F2 peer replication when the transport lands.
 - [ ] P1.5 Human notified: Phase 1 checkpoint review.
-- [~] P1.6 Sustained-write stalls bounded (ADDED 2026-07-28, in the
+- [x] P1.6 Sustained-write stalls bounded (ADDED 2026-07-28, in the
       open): under >= 60 s of sustained 4 KiB random writes through the
       served path, no single write exceeds a stated latency bound
       (bound set from baseline + the F2 latency/durability trade,
       order 100 ms-class -- NOT minutes), and steady-state IOPS is a
       stated fraction of burst IOPS. Oracle: fio clat max + per-1s
-      IOPS samples, same rig as the evidence below. Why added: the
+      IOPS samples, same rig as the evidence below.
+      -> CLOSED (2026-07-28, commit 7029811): the acked 250 ms bound is
+      encoded as a committed re-runnable harness
+      (tests/p16latencygate/run.sh, 5 x 30 s in-guest saturated legs);
+      closing run PASS with legs 48.0/68.3/89.1/91.8/91.7 ms -- worst
+      91.8 ms, 2.7x margin. Full slice history + evidence notes below. Why added: the
       F7 wiring slice measured single-write stalls of 246 s behind
       synchronous backpressure drains end-to-end in-guest (burst 27-36k
       IOPS vs steady-state 592/324; viperblock vhostuser/results/
@@ -319,13 +331,19 @@ that must meet them -- never after the implementation.
       legs): clat max 27.6-109.3 ms across all six legs, vhost p99
       73-82 us vs nbdkit 137-163 us. The 246 s -> 35 s -> 16 s stall
       generations are gone on BOTH backends.
-      REMAINING (the only remaining content of this box): human ack of
-      the proposed bound -- "no single 4 KiB write under sustained
-      saturation exceeds 250 ms across a repeated-run distribution"
-      (measured maxima 67 ms file / 109.3 ms s3 = 2.3-3.7x margins) --
-      then encode it as the P1.6 assertion in the rig harness.
-      Saturated-OVERWRITE drain throughput stays a separate named
-      backlog lever, not part of this gate.
+      -> BOUND ACKED by the human (2026-07-28, verbatim: "#3 is an
+      "Ack" frok me!  what's next? lets continue" -- referencing the
+      250 ms proposal, item 3(bound-ack) of the session report).
+      Bound: no single 4 KiB write under sustained saturation exceeds
+      250 ms across a repeated-run distribution (measured maxima 67 ms
+      file / 109.3 ms s3 = 2.3-3.7x margins).
+      NOTE (restructured in the open, recorded when the gate was
+      added): the original "steady-state IOPS is a stated fraction of
+      burst" clause belonged to the throughput lever, which was split
+      out as its own backlog item (saturated-overwrite drain
+      throughput); this gate closes on the latency bound.
+      Encoding + closing artifact: tests/p16latencygate/ harness on
+      the fix branch (see final note below when ticked).
 
 ## Phase 2 -- EBS-grade backing store (Predastore)
 
