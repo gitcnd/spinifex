@@ -2,7 +2,7 @@
 
 <!-- Overwrite-in-place. History lives in JOURNAL.md. -->
 
-Last updated: 2026-07-28 03:10 (F2 ACKED and DECIDED; Phase 1 opened -- durable Flush barrier landed with green suite; vhost-user backend working in-process)
+Last updated: 2026-07-28 04:00 (F2 slice 2 landed: peer replication wired into the flush barrier, replica WAL byte-identical to primary, fail-closed on replica death; P1.1 [~] P1.4 [~])
 v3 baseline, then automated NBD-race pre/post verification, then cluster
 shutdown; regression-runner validation also running; vhost-user codec +
 virtqueue slice landed with green unit tests)

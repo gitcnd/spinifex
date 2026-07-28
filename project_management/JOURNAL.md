@@ -140,6 +140,38 @@ Next (for whoever picks up remediation, NOT this chat): work the
 SECURITY_AUDIT_PRELIMINARY.md priority queue, reproduce each item before
 fixing. OPS-1 (rotate the working-tree token) is a human action.
 
+## 2026-07-28 03:55 -- F2 SLICE 2: PEER REPLICATION WIRED INTO THE BARRIER,
+##                     REPLICA WAL BYTE-IDENTICAL TO PRIMARY
+Plan: build the F2 replication transport and wire it into the engine.
+Done:
+- walrepl package (viperblock commit a298ca7, pushed): replica server
+  (group-commit fsync, cumulative seq acks, handshake carries volume +
+  WAL header so replica files are VALID WAL FILES -- future promotion
+  can recover from them directly); ordered streaming client with a
+  Barrier() that resolves only when everything sent is replica-durable.
+- Engine wiring: WriteWAL streams each record under the WAL lock
+  (replica order == file order); Flush() barrier = local fsync
+  (SyncOnFlush) + replica durability; broken replica FAILS the barrier.
+  Sharded WAL explicitly rejected with Replicator set (no single record
+  order); legacy WAL is the serving default.
+- Tests: transport byte-exactness (100 random-size records), empty-
+  barrier fast path, dead-replica barrier failure (deterministic fake
+  replica), and the integration crown jewel -- replica WAL file byte-
+  identical to the primary's active WAL after a real VB flush barrier.
+  FULL suite green (viperblock 180.5 s, all packages).
+- Honest design note banked in the gate: replication currently covers
+  FLUSHED writes; the acked-but-unflushed memory window (14.2% measured
+  in P-1.3) is NOT yet replicated -- closing it needs replicate-on-
+  WriteAt (streaming acks) or WAL-on-ack, the next design point.
+Failed/learned:
+- First dead-replica test closed the LISTENER and expected the barrier
+  to fail -- but established connections outlive listeners; a
+  deterministic fake replica (accept, read, hang up) is the right shape.
+Metrics: slice ~620 lines incl. tests; suite 184 s.
+Fork movement: F2 DECIDED -> first two implementation slices landed.
+Next: QEMU vhost-user smoke test (device confirmed available in host
+QEMU); then replicate-on-WriteAt design; then promotion slice.
+
 ## 2026-07-28 03:05 -- F2 ACKED BY HUMAN; PHASE 1 OPENED WITH THE DURABLE
 ##                     FLUSH BARRIER (P1.4 SLICE 1)
 Plan: record the human's F2 ack and start Phase 1 with the thinnest

@@ -194,10 +194,22 @@ that must meet them -- never after the implementation.
 
 ## Phase 1 -- EBS-grade durability core (Viperblock; depends on F2)
 
-- [ ] P1.1 Acknowledged-write durability per the F2 decision implemented;
+- [~] P1.1 Acknowledged-write durability per the F2 decision implemented;
       the P-1.3 harness reports ZERO lost guest-FLUSHed writes and zero
       lost acknowledged writes across >= 500 injected crashes including
       whole-VM kill. Tolerance origin: EBS semantics (ack = durable).
+      -> transport slice DONE (2026-07-28, viperblock commit a298ca7):
+      walrepl package (ordered streaming, group-commit fsync replica,
+      cumulative acks, WAL-header handshake so replica files are valid
+      WAL files) wired into WriteWAL + the Flush barrier; broken replica
+      fails the barrier (fail-closed). Byte-exact replica==primary WAL
+      test green through a real barrier; full suite green. REMAINING
+      (the only remaining content of this box): promotion/recovery from
+      replica WALs, reconnect/resync, degraded-mode policy, the
+      500-crash harness run against the replicated configuration, and
+      the acked-UNFLUSHED window (memory buffer) which replication does
+      not yet cover -- that needs replicate-on-WriteAt or WAL-on-ack,
+      a design point for the next slice.
 - [ ] P1.2 Node-loss survival: with the F2 mechanism active, hard-kill the
       primary storage node; volume resumes on a peer with zero acknowledged
       writes lost. Oracle: pattern read-back.
