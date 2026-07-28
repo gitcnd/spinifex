@@ -66,60 +66,65 @@ func respondWithJSON(msg *nats.Msg, data any) {
 	}
 }
 
-// handleNATSRequest is a generic helper for the common unmarshal → service → marshal → respond pattern.
-// It opens a consumer span joining the producer's trace, extracts the account ID
-// from the NATS message header, and passes both to the service function.
-func handleNATSRequest[I any, O any](msg *nats.Msg, serviceFn func(context.Context, *I, string) (*O, error)) {
-	ctx, span := utils.StartConsumerSpan(msg)
-	defer span.End()
+// handleNATSRequest returns the nats.MsgHandler for the common unmarshal → service →
+// marshal → respond pattern. Per message the handler opens a consumer span joining the
+// producer's trace, extracts the account ID from the NATS message header, and passes
+// both to the service function.
+func handleNATSRequest[I any, O any](serviceFn func(context.Context, *I, string) (*O, error)) nats.MsgHandler {
+	return func(msg *nats.Msg) {
+		ctx, span := utils.StartConsumerSpan(msg)
+		defer span.End()
 
-	accountID := utils.AccountIDFromMsg(msg)
-	input := new(I)
-	if errResp := utils.UnmarshalJsonPayload(input, msg.Data); errResp != nil {
-		utils.MarkSpanError(span, errors.New(awserrors.ErrorInvalidParameterValue))
-		if err := msg.Respond(errResp); err != nil {
-			slog.ErrorContext(ctx, "Failed to respond to NATS request", "err", err)
+		accountID := utils.AccountIDFromMsg(msg)
+		input := new(I)
+		if errResp := utils.UnmarshalJsonPayload(input, msg.Data); errResp != nil {
+			utils.MarkSpanError(span, errors.New(awserrors.ErrorInvalidParameterValue))
+			if err := msg.Respond(errResp); err != nil {
+				slog.ErrorContext(ctx, "Failed to respond to NATS request", "err", err)
+			}
+			return
 		}
-		return
+		output, err := serviceFn(ctx, input, accountID)
+		if err != nil {
+			// The error was otherwise only recorded on the OTel span, invisible
+			// without a trace backend. Log at Error so handler failures show up
+			// in the journal too.
+			slog.ErrorContext(ctx, "handleNATSRequest: service call failed", "subject", msg.Subject, "err", err)
+			utils.MarkSpanError(span, err)
+			respondWithError(msg, awserrors.ValidErrorCodeFromError(err))
+			return
+		}
+		respondWithJSON(msg, output)
 	}
-	output, err := serviceFn(ctx, input, accountID)
-	if err != nil {
-		// The error was otherwise only recorded on the OTel span, invisible
-		// without a trace backend. Log at Error so handler failures show up
-		// in the journal too.
-		slog.ErrorContext(ctx, "handleNATSRequest: service call failed", "subject", msg.Subject, "err", err)
-		utils.MarkSpanError(span, err)
-		respondWithError(msg, awserrors.ValidErrorCode(err.Error()))
-		return
-	}
-	respondWithJSON(msg, output)
 }
 
 // handleNATSRequestWithPrincipal is handleNATSRequest for service methods that
 // also need the caller's IAM principal ARN (X-Principal-ARN header) — e.g. EKS
 // CreateCluster, which mints the bootstrap-creator-admin AccessEntry for the
 // caller.
-func handleNATSRequestWithPrincipal[I any, O any](msg *nats.Msg, serviceFn func(context.Context, *I, string, string) (*O, error)) {
-	ctx, span := utils.StartConsumerSpan(msg)
-	defer span.End()
+func handleNATSRequestWithPrincipal[I any, O any](serviceFn func(context.Context, *I, string, string) (*O, error)) nats.MsgHandler {
+	return func(msg *nats.Msg) {
+		ctx, span := utils.StartConsumerSpan(msg)
+		defer span.End()
 
-	accountID := utils.AccountIDFromMsg(msg)
-	principalARN := utils.PrincipalARNFromMsg(msg)
-	input := new(I)
-	if errResp := utils.UnmarshalJsonPayload(input, msg.Data); errResp != nil {
-		utils.MarkSpanError(span, errors.New(awserrors.ErrorInvalidParameterValue))
-		if err := msg.Respond(errResp); err != nil {
-			slog.ErrorContext(ctx, "Failed to respond to NATS request", "err", err)
+		accountID := utils.AccountIDFromMsg(msg)
+		principalARN := utils.PrincipalARNFromMsg(msg)
+		input := new(I)
+		if errResp := utils.UnmarshalJsonPayload(input, msg.Data); errResp != nil {
+			utils.MarkSpanError(span, errors.New(awserrors.ErrorInvalidParameterValue))
+			if err := msg.Respond(errResp); err != nil {
+				slog.ErrorContext(ctx, "Failed to respond to NATS request", "err", err)
+			}
+			return
 		}
-		return
+		output, err := serviceFn(ctx, input, accountID, principalARN)
+		if err != nil {
+			utils.MarkSpanError(span, err)
+			respondWithError(msg, awserrors.ValidErrorCodeFromError(err))
+			return
+		}
+		respondWithJSON(msg, output)
 	}
-	output, err := serviceFn(ctx, input, accountID, principalARN)
-	if err != nil {
-		utils.MarkSpanError(span, err)
-		respondWithError(msg, awserrors.ValidErrorCode(err.Error()))
-		return
-	}
-	respondWithJSON(msg, output)
 }
 
 // handleEC2Events processes incoming EC2 instance events (start, stop, terminate, attach-volume).
@@ -155,6 +160,13 @@ func (d *Daemon) handleEC2Events(msg *nats.Msg) {
 		d.handleAttachVolume(ctx, msg, command, instance)
 	case command.Attributes.DetachVolume:
 		d.handleDetachVolume(ctx, msg, command, instance)
+	case command.Attributes.DrainVolume:
+		// A drain flushes the volume's whole dirty set to S3, so it is bounded by
+		// the dirty set rather than by a unit of work. nats.go delivers a
+		// subscription's messages serially, so running it inline would stall
+		// every other command for this instance — stop, terminate, hot-plug —
+		// for the duration. It touches no VM state, so it is safe off-thread.
+		go d.handleDrainVolume(ctx, msg, command, instance)
 	case command.Attributes.AttachENI:
 		d.handleAttachNetworkInterface(ctx, msg, command, instance)
 	case command.Attributes.DetachENI:
@@ -171,7 +183,7 @@ func (d *Daemon) handleEC2Events(msg *nats.Msg) {
 		endOpSpan(opSpan, err)
 		if err != nil {
 			utils.MarkSpanError(span, err)
-			respondWithError(msg, awserrors.ValidErrorCode(err.Error()))
+			respondWithError(msg, awserrors.ValidErrorCodeFromError(err))
 			return
 		}
 		if err := msg.Respond(fmt.Appendf(nil, `{"status":"running","instanceId":"%s"}`, instance.ID)); err != nil {
@@ -183,7 +195,7 @@ func (d *Daemon) handleEC2Events(msg *nats.Msg) {
 		endOpSpan(opSpan, err)
 		if err != nil {
 			utils.MarkSpanError(span, err)
-			respondWithError(msg, awserrors.ValidErrorCode(err.Error()))
+			respondWithError(msg, awserrors.ValidErrorCodeFromError(err))
 			return
 		}
 		if err := msg.Respond([]byte(`{}`)); err != nil {
@@ -199,7 +211,7 @@ func (d *Daemon) handleEC2Events(msg *nats.Msg) {
 		endOpSpan(opSpan, err)
 		if err != nil {
 			utils.MarkSpanError(span, err)
-			respondWithError(msg, awserrors.ValidErrorCode(err.Error()))
+			respondWithError(msg, awserrors.ValidErrorCodeFromError(err))
 			return
 		}
 		if err := msg.Respond([]byte(`{}`)); err != nil {

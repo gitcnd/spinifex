@@ -14,6 +14,7 @@ import (
 	"github.com/mulgadc/spinifex/spinifex/formation"
 	handlers_dns "github.com/mulgadc/spinifex/spinifex/handlers/dns"
 	handlers_iam "github.com/mulgadc/spinifex/spinifex/handlers/iam"
+	"github.com/mulgadc/spinifex/spinifex/hostdns"
 	"github.com/mulgadc/spinifex/spinifex/utils"
 	toml "github.com/pelletier/go-toml/v2"
 	"github.com/spf13/cobra"
@@ -545,6 +546,32 @@ func TestSpinifexTomlTemplate_EncryptionKeyFile(t *testing.T) {
 	assert.NotContains(t, string(data2), "encryption_key_file", "blank key must omit the field")
 }
 
+// A rendered node config must turn chunk GC on. Asserting the template text
+// alone is not enough: the value has to survive parsing into a non-nil true
+// pointer, because every consumer treats nil as off. Rendering and loading
+// together is the only check that covers the whole path.
+func TestSpinifexTomlTemplate_GCEnabled(t *testing.T) {
+	dir := t.TempDir()
+	settings := admin.ConfigSettings{
+		Node: "node1", Az: "ap-southeast-2a", Port: "4432", Region: "ap-southeast-2",
+		BindIP: "0.0.0.0", AccessKey: "AKIATEST", SecretKey: "SECRET",
+		AccountID: "123456789012", NatsToken: "token",
+		OVNNBAddr: "tcp:127.0.0.1:6641", OVNSBAddr: "tcp:127.0.0.1:6642",
+		ConfigDir: dir,
+	}
+
+	path := filepath.Join(dir, "spinifex.toml")
+	require.NoError(t, admin.GenerateConfigFile(path, spinifexTomlTemplate, settings))
+
+	cfg, err := config.LoadConfig(path)
+	require.NoError(t, err)
+
+	node, ok := cfg.Nodes["node1"]
+	require.True(t, ok, "rendered config must define the node")
+	require.NotNil(t, node.Viperblock.GCEnabled, "gc_enabled must be rendered; nil leaves chunk GC off on every deployed node")
+	assert.True(t, *node.Viperblock.GCEnabled, "chunk GC must be enabled in a freshly rendered node config")
+}
+
 // Joiners run `spx admin join` against a configDir that doesn't yet contain
 // a predastore/ subdir. The helper must create it (predastore subdir is
 // owned by spinifex-storage in prod, but the helper just needs the dir to
@@ -1055,6 +1082,135 @@ func TestAdminInitFlag_CompactionIntervalReachesRenderedConfig(t *testing.T) {
 		Region: "ap-southeast-2", BindIP: "0.0.0.0", CompactionIntervalSeconds: v,
 	})
 	assert.Contains(t, out, "interval_seconds = 45")
+}
+
+func TestFilterDNSServersExcludesLocalNorthstar(t *testing.T) {
+	servers := []string{
+		"10.0.0.5",
+		"127.0.0.53",
+		"1.1.1.1",
+		"1.1.1.1",
+		"not-an-ip",
+		"2001:0db8::1",
+		"8.8.8.8",
+		"9.9.9.9",
+		"4.4.4.4",
+	}
+
+	got := filterDNSServers(servers, "10.0.0.5", "2001:db8::1")
+	assert.Equal(t, []string{"1.1.1.1", "8.8.8.8", "9.9.9.9"}, got)
+}
+
+func TestDetectDNSServersContinuesAfterExcludedSource(t *testing.T) {
+	var queries []string
+	sources := dnsDetectionSources{
+		queryResolvectl: func(args ...string) (string, error) {
+			query := strings.Join(args, " ")
+			queries = append(queries, query)
+			switch query {
+			case "dns br-wan":
+				return "Link 2 (br-wan): 10.0.0.5 127.0.0.53\n", nil
+			case "dns":
+				return "Global: 10.0.0.5 10.0.0.5 127.0.0.53 10.20.0.53 8.8.8.8\n", nil
+			default:
+				return "", fmt.Errorf("unexpected query %q", query)
+			}
+		},
+		readResolvConf: func() (string, error) {
+			t.Fatal("resolv.conf read despite usable global resolvers")
+			return "", nil
+		},
+	}
+
+	got := detectDNSServersWithSources("br-wan", []string{"10.0.0.5"}, sources)
+	assert.Equal(t, []string{"10.20.0.53", "8.8.8.8"}, got)
+	assert.Equal(t, []string{"dns br-wan", "dns"}, queries)
+}
+
+func TestDetectDNSServersFallsBackToResolvConf(t *testing.T) {
+	sources := dnsDetectionSources{
+		queryResolvectl: func(_ ...string) (string, error) {
+			return "", errors.New("resolver manager unavailable")
+		},
+		readResolvConf: func() (string, error) {
+			return "nameserver 10.0.0.5\nnameserver 10.20.0.53\n", nil
+		},
+	}
+
+	got := detectDNSServersWithSources("br-wan", []string{"10.0.0.5"}, sources)
+	assert.Equal(t, []string{"10.20.0.53"}, got)
+}
+
+func TestHostDNSParams(t *testing.T) {
+	// northstarEnabled requires both credentials; the zones and IPs mirror what
+	// admin init/join hold in memory after rendering northstar.toml.
+	enabled := admin.ConfigSettings{
+		NorthstarAccessKey:      "AK",
+		NorthstarSecretKey:      "SK",
+		NorthstarDefaultDomain:  "spx3.net",
+		NorthstarInternalDomain: "compute.internal",
+		AdvertiseIP:             "10.0.0.5",
+		BindIP:                  "0.0.0.0",
+	}
+
+	tests := []struct {
+		name       string
+		settings   admin.ConfigSettings
+		skip       bool
+		wantOK     bool
+		wantParams hostdns.Params
+	}{
+		{
+			name:     "enabled selects AdvertiseIP over BindIP",
+			settings: enabled,
+			wantOK:   true,
+			wantParams: hostdns.Params{
+				ResolverIP:     "10.0.0.5",
+				BaseDomain:     "spx3.net",
+				InternalDomain: "compute.internal",
+			},
+		},
+		{
+			name: "falls back to BindIP when AdvertiseIP is unset",
+			settings: func() admin.ConfigSettings {
+				s := enabled
+				s.AdvertiseIP = ""
+				s.BindIP = "10.0.0.9"
+				return s
+			}(),
+			wantOK: true,
+			wantParams: hostdns.Params{
+				ResolverIP:     "10.0.0.9",
+				BaseDomain:     "spx3.net",
+				InternalDomain: "compute.internal",
+			},
+		},
+		{
+			name:     "opt-out skips even when enabled",
+			settings: enabled,
+			skip:     true,
+			wantOK:   false,
+		},
+		{
+			name: "northstar disabled skips",
+			settings: func() admin.ConfigSettings {
+				s := enabled
+				s.NorthstarSecretKey = ""
+				return s
+			}(),
+			wantOK: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := hostDNSParams(tt.settings, tt.skip)
+			assert.Equal(t, tt.wantOK, ok)
+			if tt.wantOK {
+				assert.Equal(t, tt.wantParams, got)
+			}
+		})
+	}
 }
 
 // The image is written into a root volume of exactly the size this returns, so
