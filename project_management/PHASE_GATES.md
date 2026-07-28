@@ -156,7 +156,7 @@ that must meet them -- never after the implementation.
       on completion (the only remaining content of this box).
 - [ ] P-1.8 Human notified: Phase -1 review; forks F0/F1 answered, F2
       decided from P-1.4 evidence.
-- [~] P-1.9 Data-path candidates measured (fork F7, ADDED 2026-07-27 at
+- [x] P-1.9 Data-path candidates measured (fork F7, ADDED 2026-07-27 at
       the human's request: "nbdkit is a bottleneck ... needs to be
       replaced with a block device driver"): prototype at least one of
       vhost-user-blk / ublk backed by the viperblock engine (plus the
@@ -190,12 +190,17 @@ that must meet them -- never after the implementation.
       drives QEMU to 96% CPU vs the reference's 16.7% (= a real spin bug
       isolated to our backend). RHEL qemu-kvm ships no vhost-user trace
       events, so the reference-diff is the oracle.
-      REMAINING (the only remaining content of this box): (1) a real
-      success signal (boot the reference config to SSH -- console=ttyS0 /
-      -nographic), (2) fix our backend's QEMU-side spin (diff on-wire vs
-      qemu-storage-daemon), (3) in-guest fio vhost-vs-NBD = the F7
-      numbers. Also on the table: the ublk candidate (guest kernel 6.12
-      supports it) as a lower-friction path to the same numbers. F7 OPEN.
+      -> COMPLETE (2026-07-28, viperblock commit a2fc287): the QEMU-side
+      "spin" was BOOT ORDER (blank vhost disk stealing boot priority;
+      bootindex on the OS disk fixed it) plus a SET_VRING_NUM struct-
+      parse bug (queue size read as 0 -> queue never served -> guest I/O
+      hang). Both fixed. Guest now boots to SSH; /dev/vdb round-trips
+      16 MiB byte-identical. IN-GUEST fio, same raw backend, three paths:
+      vhost-user 28.5k/28.3k rw d1/d16, 24.8k/25.5k rd; nbdkit 15.7k/
+      16.4k, 18.4k/18.3k; plain virtio 14.3k/16.1k, 19.0k/18.2k.
+      vhost-user ~1.8x NBD writes, ~1.35x reads. This is the P-1.9
+      decision evidence; F7 -> LEANING (b). (ublk not needed -- vhost
+      numbers are decisive.)
 
 ## Phase 0 -- Harness and regression infrastructure
 

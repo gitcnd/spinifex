@@ -140,6 +140,46 @@ Next (for whoever picks up remediation, NOT this chat): work the
 SECURITY_AUDIT_PRELIMINARY.md priority queue, reproduce each item before
 fixing. OPS-1 (rotate the working-tree token) is a human action.
 
+## 2026-07-28 09:10 -- F7 DECIDED BY EVIDENCE: VHOST-USER-BLK BOOTS REAL
+##                     QEMU AND IS ~1.8x NBD IN-GUEST (P-1.9 [x])
+Plan: chase the "next path" -- get the vhost-user backend booting a real
+guest and produce the F7 decision numbers.
+Done (this was a big one):
+- Root-caused BOTH prior blockers, neither was what I'd guessed:
+  1. The "QEMU 96% spin / empty serial" was BOOT ORDER -- SeaBIOS tried
+     to boot the blank vhost disk and hung. Proven via a reference
+     oracle (qemu-storage-daemon's own vhost-user-blk export showed the
+     SAME empty serial) and an isolation boot (memfd machine boots fine
+     with NO vhost device). Fix: bootindex=0 on the OS disk.
+  2. Then the guest hung in initramfs (udev timeout). Backend logging
+     against the live guest showed size=0 at SET_VRING_KICK -> queue
+     never started. Bug: SET_VRING_NUM/BASE payload is
+     struct{u32 index; u32 num}; I read a bare u64's low bits (=index=0)
+     instead of num at offset 4. Fixed (commit e0423c7).
+- RESULT: guest boots to SSH with our pure-Go vhost-user-blk backend;
+  /dev/vdb round-trips 16 MiB random data byte-identical. Then the F7
+  decision measurement (commit a2fc287, in-guest fio, same raw backend,
+  three paths in one guest):
+    vhost-user 28.5k/28.3k rw d1/d16, 24.8k/25.5k rd
+    nbdkit     15.7k/16.4k rw,        18.4k/18.3k rd
+    plain vio  14.3k/16.1k rw,        19.0k/18.2k rd
+  vhost-user ~1.8x NBD on writes, ~1.35x reads, and beats QEMU's own
+  virtio-blk-over-file. P-1.9 [x]; F7 -> LEANING (b) (human ack pending,
+  MAJOR).
+Failed/learned:
+- Don't trust one success signal: serial emptiness was a machine-config
+  artifact, not the bug. The reference oracle corrected me.
+- The shell harness's silent && breakage on non-zero pgrep/grep + the
+  pidfile-subshell trap cost real time again; I moved to editor-based
+  instrumentation (reliable) over python/sed heredocs and to explicit
+  process loops. Enough scalps now that this is a standing rule.
+Metrics: this arc ~2.5 h incl. ~6 guest boots (~2-4 min each).
+Fork movement: F7 OPEN -> LEANING (b) with decisive evidence.
+Next: human ack on F7; then wire the real viperblock WAL engine behind
+vhost-user (+ the engine write-concurrency qualifier) and multi-queue /
+reconnect; the raw-file result isolates transport, which was the
+question.
+
 ## 2026-07-28 06:30 -- MEM-TABLE REMAP FIX LANDED; QEMU WEDGE RE-DIAGNOSED
 ##                     WITH A REFERENCE-BACKEND ORACLE (SPLIT IN TWO)
 Plan: fix the mem-table-remap-after-start wedge from the last smoke test.

@@ -2,7 +2,7 @@
 
 <!-- Overwrite-in-place. History lives in JOURNAL.md. -->
 
-Last updated: 2026-07-28 06:35 (mem-table remap fix landed + race-tested; QEMU wedge re-diagnosed via reference oracle -- empty serial is machine-config, our backend has an isolated 96%-CPU spin)
+Last updated: 2026-07-28 09:10 (F7 vhost-user-blk boots real QEMU and is ~1.8x NBD in-guest -- P-1.9 [x], F7 LEANING (b), human ack pending)
 v3 baseline, then automated NBD-race pre/post verification, then cluster
 shutdown; regression-runner validation also running; vhost-user codec +
 virtqueue slice landed with green unit tests)
@@ -20,7 +20,7 @@ Nothing blocking. Non-blocking queue:
 1. REVIEW: F0/F1 closed by your delegation (DECISIONS.md) -- Outposts
    parity = service-set first then thin outposts.* API; "predastore as
    EBS" = harden the whole Viperblock+Predastore stack. Object if wrong.
-1a. RESOLVED 2026-07-28: F2 ACKED by human ("(b) sounds best") --
+1a. RESOLVED: F2 acked. 1b. ACK REQUESTED (MAJOR fork F7): adopt vhost-user-blk as the VM data path -- measured ~1.8x NBD writes in-guest (DECISIONS.md F7). "Go" lets us wire the viperblock engine behind it as the production path.
    synchronous peer WAL replication is DECIDED. Phase 1 implementation
    unblocked and started (first slice: durable Flush barrier, P1.4).
 2. RESOLVED 2026-07-27 07:45: human granted the token read+write on

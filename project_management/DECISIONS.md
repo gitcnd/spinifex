@@ -144,9 +144,12 @@ Evidence: token probes 2026-07-27 (GET /user 200; gitcnd/spinifex
 Revisit trigger: human forks the two sibling repos or widens the token.
 
 ## F7 -- Guest block-device data path (replace nbdkit)  [MAJOR]
-Status: OPEN (human-initiated 2026-07-27: "nbdkit is a bottleneck - that
-  needs to be replaced with a block device driver")
-Decision: (pending measurement)
+Status: LEANING (b) vhost-user-blk (2026-07-28, on in-guest fio evidence
+  below; MAJOR, so human ack still required to move to DECIDED)
+Decision: (pending human ack) option (b) vhost-user-blk as the VM data
+  path, with (a) native Go NBD retained for host-side attach. A working
+  pure-Go vhost-user-blk backend exists (viperblock branch
+  feat/data-path-vhost-user-blk) and is measured decisively faster.
 Context: today guest virtio-blk -> QEMU NBD client -> socket -> nbdkit
   (C shim) -> Go plugin -> viperblock. Every IO pays protocol framing,
   extra copies, and a process hop. Candidates, cheapest first:
@@ -186,4 +189,23 @@ Escalation path: (b) vhost-user-blk is the presumptive endgame for VM
   alone will not deliver its win without engine concurrency work;
   (2) depth-1 reads are backend-dominated (2.28 ms/op with predastore
   chunk GETs), so the read path's leverage is cache/backend, not
-  transport. Fork stays OPEN pending P-1.9 candidate prototypes.
+  transport.
+2026-07-28 DECISIVE EVIDENCE (P-1.9, viperblock commit a2fc287,
+  vhostuser/results/2026-07-28_inguest_fio_vhost_vs_nbd_vs_plain.txt):
+  a working pure-Go vhost-user-blk backend, measured IN-GUEST (real
+  QEMU 7.2 + Debian 13 kernel 6.12) with fio against the SAME raw-file
+  backend as NBD and plain virtio, side by side. 4 KiB IOPS:
+    vhost-user   28.5k rw-d1 / 28.3k rw-d16 / 24.8k rd-d1 / 25.5k rd-d16
+    nbd (nbdkit) 15.7k / 16.4k / 18.4k / 18.3k
+    plain virtio 14.3k / 16.1k / 19.0k / 18.2k
+  vhost-user is ~1.8x NBD on writes, ~1.35x on reads, and beats QEMU's
+  own virtio-blk-over-file -- shared-memory virtqueues remove the per-op
+  socket round trip (the cost the native-Go-NBD prototype confirmed NBD
+  cannot escape). Fork -> LEANING (b); human ack pending.
+  IMPLEMENTATION STATUS: negotiation + split-virtqueue + IN/OUT/FLUSH/
+  GET_ID + live mem-table remap all working; guest boots to SSH and
+  /dev/vdb round-trips 16 MiB byte-identical. Bugs fixed en route:
+  boot-order (bootindex on the OS disk), SET_VRING_NUM/BASE struct
+  parse. REMAINING before DECIDED-in-practice: wire the real viperblock
+  WAL engine behind it (+ engine write concurrency, qualifier 1),
+  multi-queue, reconnect.
