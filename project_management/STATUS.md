@@ -2,10 +2,11 @@
 
 <!-- Overwrite-in-place. History lives in JOURNAL.md. -->
 
-Last updated: 2026-07-28 14:40 (P1.6 slices 2+3a DONE: batched flush
-+ fsync off the WAL append path; in-guest clat max progression
-246 s -> 35.3 s -> 31.6 s -> 16.3 s, diag steady IOPS 329 -> 3440;
-slice 4 named: pipeline chunk assembly with the flush)
+Last updated: 2026-07-28 15:15 (UPSTREAM SYNC: all three repos merged
+to mulgadc v1.14.0, conflicts resolved, suites green, post-merge
+regression run in flight; note upstream landed its own sharded RMW
+write locking in WriteAtCtx -- relevant to the F7 concurrency
+qualifier. Before that: P1.6 slices 2+3a, clat max 246 s -> 16.3 s)
 Current phase: Phase -1 nearly done (6/9 [x], 1/9 [~]) + Phase 1 OPEN
 (P1.1 [~], P1.4 [~], P1.6 [~])
 Current slice: NEXT = P1.6 slice 4: pipeline the drain (consume
@@ -28,6 +29,10 @@ Nothing blocking. Non-blocking queue:
    repos, not GitHub forks, so they cannot open PRs against mulgadc/*.
    If upstreaming becomes the goal: delete them, click Fork on the
    mulgadc repos, re-add to token, re-push (identical history, 2 min).
+6. Upstream-reportable (non-blocking): mulgadc/spinifex's new daemon
+   test TestHandleEC2RunInstances_ValidKeyPairPassesValidation has a
+   teardown race (flaky ~10-20% on this host, both net modes). Say the
+   word and I'll draft the issue/PR from the spinifex fork.
 RESOLVED 2026-07-28: F7 ACKED by the human (verbatim in DECISIONS.md
 F7) -- vhost-user-blk is the VM data path. F2 was acked earlier the
 same day. OPS-1 (token rotation) resolved as NO-OP per human direction
@@ -62,6 +67,28 @@ overlaps Phase 1 durability work and should be fixed on that branch.
   - feat/shard-healer-and-read-repair: availability probe + P-1.6
     baseline + s3-tests rig + P-1.7 frozen baseline. ACTIVE for Phase 2.
   - feat/s3-api-surface-completion: created, no commits yet (Phase 2).
+
+## What landed 2026-07-28 (9th drop): upstream sync to v1.14.0
+- All three repos merged to mulgadc v1.14.0 and pushed (spinifex 56
+  commits, viperblock 20, predastore 10). Conflicts resolved keeping
+  both intents (details in JOURNAL 15:10); notable upstream arrivals:
+  sharded per-block RMW write locking in viperblock's WriteAtCtx (the
+  F7 write-concurrency qualifier, from upstream), 503-SlowDown no
+  longer latches backendFull, GC on its own goroutine, predastore FSM
+  restore batching + test-port fix.
+- Fork main = upstream + 2 prior-agent housekeeping commits (was
+  undocumented drift from the recorded 220141b1 baseline; ENVIRONMENT
+  corrected). All P1.6 gate tests + full viperblock suite green on the
+  merged branches.
+- Post-merge regression: 5/6 pass. Two triaged failures: (1) runner
+  lacked GOFIPS140 for the new vhost-serve test package -- runner
+  FIXED, viperblock suite green on re-run; (2) upstream-NEW test
+  TestHandleEC2RunInstances_ValidKeyPairPassesValidation is FLAKY
+  (~10-20%, BOTH normal and hermetic modes: t.TempDir cleanup races an
+  async instance-state writer -- "directory not empty" + tmp-rename
+  errors). Attributed as an upstream test bug, non-blocking,
+  UPSTREAM-REPORTABLE (gitcnd/spinifex is a real GitHub fork, PR
+  possible). All project-owned suites green.
 
 ## What landed 2026-07-28 (8th drop): P1.6 slices 2+3a
 - Batched flush (commit df1b759): WAL appends off Writes.mu in
@@ -174,7 +201,9 @@ P5: 0/4
 - Unit suites: normal mode EXCEPT spinifex/daemon which needs hermetic
   netns (`unshare -r -n` + lo up) -- TLS-test stall, cause under triage.
 - NEVER print or commit the .env token; source .env inline per push.
-- Feature branches cut from main (220141b1), not from project-management.
+- Feature branches cut from main (now = upstream v1.14.0 + 2 local
+  housekeeping commits; synced 2026-07-28), not from project-management.
+- After any upstream sync: rerun the regression runner before building.
 - Shared, loaded machine: VMs <= 16 GiB, kill orphans (pgrep -x, never
   pkill -f with self-matching patterns), nothing destructive without
   explicit ask.

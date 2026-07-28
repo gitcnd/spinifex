@@ -44,9 +44,17 @@
 
 ## Repos and sources
 
-- Workspace: /home/devnull/Downloads/github/spinifex (git, branch main,
-  clean except untracked editor folders; latest commit 220141b1
-  "release: update go.mod for v1.13.0").
+- Workspace: /home/devnull/Downloads/github/spinifex (git; working
+  branch project-management). UPSTREAM SYNC 2026-07-28: all three repos
+  merged up to mulgadc v1.14.0 (spinifex upstream/main a1331b37 -- 56
+  commits; viperblock origin/main c39b213 -- 20 commits; predastore
+  origin/main 3210b6f -- 10 commits). Fork main = upstream + 2 local
+  housekeeping commits (69a826bf token-check, b9346215 .gitignore).
+  Original baseline was 220141b1 (v1.13.0); P-1.x gate evidence was
+  measured there and stands historically -- post-merge regression
+  re-run 2026-07-28 re-establishes green on v1.14.0.
+- spinifex has an `upstream` remote (mulgadc/spinifex) as of 2026-07-28;
+  viperblock/predastore siblings use origin=mulgadc, fork=gitcnd.
 - Dependency sources (read-only, from module cache):
   - /home/devnull/go/pkg/mod/github.com/mulgadc/viperblock@v1.13.0
   - /home/devnull/go/pkg/mod/github.com/mulgadc/predastore@v1.13.0

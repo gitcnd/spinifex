@@ -140,6 +140,82 @@ Next (for whoever picks up remediation, NOT this chat): work the
 SECURITY_AUDIT_PRELIMINARY.md priority queue, reproduce each item before
 fixing. OPS-1 (rotate the working-tree token) is a human action.
 
+## 2026-07-28 15:45 -- POST-MERGE REGRESSION: 5/6 + TWO ATTRIBUTED
+##                     FINDINGS (RUNNER FIPS GAP FIXED; UPSTREAM FLAKE)
+Plan: post-upstream-sync regression run, triage anything red.
+Done:
+- First run 4/6: viperblock-unit FAIL = MY gap -- the runner ran go
+  test without GOFIPS140, and the new vhost-serve test package imports
+  the fipsboot guard (panics without FIPS at build). Runner fixed
+  (GOFIPS140=v1.0.0 on the viperblock suite; comment cites the trap).
+  Lesson: adding a test package with special build env means teaching
+  the runner IN THE SAME COMMIT -- I added it this morning and did not.
+- spinifex-daemon FAIL = upstream-NEW test TestHandleEC2RunInstances_
+  ValidKeyPairPassesValidation, discriminated by running both modes
+  repeatedly: FLAKY ~10-20% in normal AND hermetic netns (t.TempDir
+  cleanup races an async instance-state writer: "directory not empty"
+  + instance-state.json.tmp rename ENOENT). Upstream test bug;
+  non-blocking; upstream-reportable (STATUS NEEDS-HUMAN 6).
+- Re-run with runner fix: 5/6 (only the characterized upstream flake
+  red; viperblock 180 s green). All project-owned suites green on
+  v1.14.0.
+Failed/learned: above (runner-env lesson; flake attribution before
+blame -- the first observation LOOKED mode-dependent and inverted on
+the second run; count-based flake measurement settled it).
+Metrics: two runner passes ~6.5 min each; flake probes ~15 s.
+Fork movement: none.
+Next: back to P1.6 slice 4 (drain pipelining) on the v1.14.0 base.
+
+## 2026-07-28 15:10 -- UPSTREAM SYNC: ALL THREE REPOS MERGED TO MULGADC
+##                     v1.14.0; CONFLICTS RESOLVED KEEPING BOTH INTENTS
+Plan: human flagged the fork trailing upstream ("56 commits behind");
+survey the deltas, merge everything current, re-green the baseline.
+Done:
+- Survey first (upstream-churn protocol): spinifex 56 commits (v1.14.0,
+  542 files, none touching project_management/); viperblock 20 commits
+  INCLUDING 556 lines in viperblock.go -- three commits square in our
+  P1.6 area (#51 backendFull edge logging, #50 503-SlowDown no longer
+  ErrNoSpace, #49 GC off the uploader goroutine) plus UPSTREAM'S OWN
+  sharded per-block RMW locking in a restructured WriteAtCtx (the F7
+  qualifier's write-concurrency work arriving from upstream);
+  predastore 10 commits (FSM restore batching, test-port allocation).
+- Discovery: local+fork spinifex main was NOT at the documented
+  220141b1 -- the prior agent's 2 housekeeping commits (69a826bf
+  token-check newline, b9346215 .gitignore) sat on it. Preserved via
+  merge (never rewrite pushed history); ENVIRONMENT corrected.
+- Merges: spinifex main (merge commit 65982560, pushed) +
+  project-management (3c7e480d) + 3 placeholder branches
+  fast-forwarded. predastore main ff + healer branch merged clean +
+  s3-api placeholder repointed; pushed. viperblock main ff + all 6
+  branches merged and pushed; conflicts only where expected:
+  durability branch (struct-field comment adjacency -- kept Replicator/
+  SyncOnFlush + upstream's new GCInterval text), vhost branch (go.mod/
+  go.sum dep bumps -- took upstream's set, go mod tidy), backpressure
+  branch (3 hunks: kept flushMu AND upstream's rmw fields; combined my
+  consecutiveDrainFailures counter with upstream's edge-logged
+  backendFull Swap; took upstream's drainForSnapshot and routed its
+  body through the batched Flush() since flushLocked is deleted here --
+  lock order drainMu -> flushMu -> Writes.mu preserved).
+- Validation: all four P1.6 gate tests pass on the merged backpressure
+  branch (admission 1.14 s / bound 2 s; flush-stall 13.7 ms / bound
+  150 ms); durability branch barrier+walrepl tests green; vhostuser
+  tests green; FULL viperblock suite green on the merged backpressure
+  branch (178.9 s) including upstream's new stale-drain/short-read/rmw
+  tests. Full regression runner re-run launched post-merge (result
+  recorded in STATUS when it lands).
+Failed/learned:
+- Verify branch positions against remotes before claiming them: the
+  handoff said main==220141b1 and I repeated it in Response #1's
+  verification without checking main itself (only the working
+  branches). The user's GitHub "30 ahead" hint is what surfaced it.
+- source .env is cwd-relative; pushing from a sibling repo needs the
+  full path (bit once, harmless).
+Metrics: survey + merges + conflict resolution + suites ~50 min.
+Fork movement: none (F7/F2 stand; upstream's RMW work advances the F7
+qualifier from their side -- noted in DECISIONS at next re-exam).
+Next: regression tally -> STATUS; then back to P1.6 slice 4 (drain
+pipelining) on the updated base.
+
 ## 2026-07-28 14:35 -- P1.6 SLICES 2+3a: FLUSH LOCK-HOLD BOUNDED AND WAL
 ##                     FSYNC OFF THE APPEND PATH; IN-GUEST MAX 16.3 s;
 ##                     SLICE 4 NAMED (DRAIN PIPELINING)

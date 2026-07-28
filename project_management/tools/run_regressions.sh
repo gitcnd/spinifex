@@ -72,7 +72,10 @@ fi
 
 run_suite spinifex-integration 600 make -C "$SPINIFEX_DIR" test-integration
 
-run_suite viperblock-unit 900 env -C "$VIPERBLOCK_DIR" go test -count=1 ./...
+# GOFIPS140: the vhost-user-blk-serve cmd package imports viperblock's
+# fipsboot guard, which panics in test binaries built without FIPS mode
+# (bit 2026-07-28 when that package joined the tree; see ENVIRONMENT.md).
+run_suite viperblock-unit 900 env -C "$VIPERBLOCK_DIR" GOFIPS140=v1.0.0 go test -count=1 ./...
 
 # predastore-unit: fixture ports may collide with a running dev cluster.
 if pgrep -x s3d > /dev/null 2>&1; then
