@@ -140,6 +140,60 @@ Next (for whoever picks up remediation, NOT this chat): work the
 SECURITY_AUDIT_PRELIMINARY.md priority queue, reproduce each item before
 fixing. OPS-1 (rotate the working-tree token) is a human action.
 
+## 2026-07-28 14:35 -- P1.6 SLICES 2+3a: FLUSH LOCK-HOLD BOUNDED AND WAL
+##                     FSYNC OFF THE APPEND PATH; IN-GUEST MAX 16.3 s;
+##                     SLICE 4 NAMED (DRAIN PIPELINING)
+Plan: STATUS next-action 1 -- bound the flush lock-hold (P1.6 slice 2).
+Done:
+- Invariants verified by reading before coding: WriteWAL locks only
+  WAL.mu (safe off Writes.mu); the scanning read path snapshots
+  Writes.Blocks under RLock with Hot beating Pending (so move-to-
+  Pending-then-remove ordering is read-safe); UseBlockStore=true is
+  the New() default and MarkPersisted already carries a SeqNum guard
+  for exactly the stale-drain race class.
+- Slice 2 (commit df1b759): flushBatchedLegacy -- 4096-block batches,
+  WAL appends OFF Writes.mu, entries stay in the hot buffer until
+  their append succeeds, removal filters by SeqNum (NEVER block
+  number: a racing rewrite appends a higher SeqNum that must survive),
+  Pending hand-off before removal, entry-count budget preserves
+  snapshot semantics, flushMu serializes flush-vs-flush (drain vs
+  guest barrier vs snapshot; snapshot.go now routes through Flush()),
+  MarkPendingIfSeqNum mirrors the MarkPersisted guard. Dead
+  flushLocked deleted. Differential gate (flush_latency_test.go):
+  old 1:1 signature (concurrent write max 634 ms == flush 664 ms)
+  FAILS; batched passes at 14 ms vs 2.29 s flush. Full suite green.
+- In-guest re-rig after slice 2: matrix ~unchanged (4206/2262 writes)
+  but 30 s diag clat max still 31.6 s -> third mechanism. Checked the
+  two cheap discriminators: WAL tree at 1.1 GiB, and syncWALIfDirty
+  holds WAL.mu.RLock ACROSS fsync while WriteWAL needs the write
+  lock -- every giant fsync stalls all WAL appends behind it.
+- Slice 3a (commit 05064d6): take the handle under the lock, fsync
+  outside it; rotation racing the fsync is benign (error + re-arm).
+  In-guest: clat max 16.3 s, diag steady IOPS 1243 -> 3440, fio wall
+  overrun nearly gone (31.25 s for a 30 s job), prefill 209 -> 270
+  MiB/s. Artifact: viperblock/results/2026-07-28_p16_slice2_slice3_
+  flush_and_fsync.txt (commit 4c513cc, pushed).
+- Slice 4 named with mechanism, not vibes: a blocked writer cannot
+  see headroom until the drain's whole flush phase completes, because
+  pendingBytes decrements only per uploaded chunk and the drain is
+  strictly flush-THEN-upload. Fix shape: pipeline chunk assembly with
+  the batched flush. Deliberately out of this session's timebox
+  (fourth sub-problem; spiral rule).
+Failed/learned:
+- The close-path drain of a few hundred MiB of random writes takes
+  minutes (observed again on rig teardown) -- same drain-throughput
+  story; slice 4's pipelining should help it too.
+- Enumerate-then-discriminate keeps paying: the 31.6 s post-slice-2
+  number could have been misread as "batching did not work"; the two
+  5-minute checks (WAL size, syncer locking) found the real third
+  mechanism instead.
+Metrics: session ~1.5 h; suite 179.8 s; two guest boots; diag legs
+30 s each.
+Fork movement: none.
+Next: P1.6 slice 4 (pipeline drain), then the final bound + rig
+re-run + the deferred s3 production pair; F2 promotion/reconnect
+slice still queued.
+
 ## 2026-07-28 13:20 -- P1.6 SLICE 1: ADMISSION-LATENCY FIX LANDED WITH
 ##                     TRUE DIFFERENTIAL VALIDATION; 7x IN-GUEST; RESIDUAL
 ##                     STALL ROOT-CAUSED TO THE FLUSH LOCK-HOLD

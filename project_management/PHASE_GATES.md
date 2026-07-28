@@ -278,14 +278,27 @@ that must meet them -- never after the implementation.
       1.17 s); full suite green. In-guest re-run: steady randwrite
       592 -> 4083 IOPS d1 (6.9x), clat max 246 s -> 35.3 s (7x), p99
       65 us unchanged, integrity green.
-      REMAINING (the only remaining content of this box): the residual
-      35 s stall is a DIFFERENT mechanism, root-caused by probe --
-      flushLocked holds Writes.mu for the whole flush (flush 724.7 ms
-      == concurrent WriteAt max 721.5 ms at 65k records; scales to
-      ~35 s in-guest with multi-GiB WAL + syncer fsyncs). Next slice:
-      bounded flush batches (release Writes.mu between batches) +/or
-      WAL appends off the lock, WAL segment rotation; then set the
-      final numeric bound with the human and re-run this rig.
+      -> SLICE 2 DONE (2026-07-28, commit df1b759): batched flush --
+      WAL appends off Writes.mu in 4096-block batches, SeqNum-exact
+      removal (racing rewrites survive, gated in
+      flush_latency_test.go), flushMu for flush-vs-flush,
+      MarkPendingIfSeqNum. Differential: old flush stalls a concurrent
+      write 634 ms == its own 664 ms duration (FAIL); batched: 14 ms
+      while flush takes 2.29 s (PASS). Suite green 179.8 s.
+      -> SLICE 3a DONE (2026-07-28, commit 05064d6): WAL syncer fsync
+      moved outside WAL.mu (was blocking every append behind
+      multi-hundred-MiB fsyncs).
+      -> In-guest progression (30 s diag, artifact viperblock/results/
+      2026-07-28_p16_slice2_slice3_flush_and_fsync.txt): clat max
+      246 s -> 35.3 s -> 31.6 s -> 16.3 s; diag steady IOPS 329 ->
+      3440; p99 65-76 us throughout; raw control unchanged.
+      REMAINING (the only remaining content of this box): slice 4 --
+      a blocked writer cannot be released until the in-flight drain's
+      whole FLUSH phase completes (pendingBytes decrements only per
+      uploaded chunk; DrainToBackendCtx is flush-everything THEN
+      upload). Fix shape: pipeline chunk assembly/upload with the
+      batched flush. Then set the final numeric bound (100 ms-class
+      target) with the human and re-run the rig.
 
 ## Phase 2 -- EBS-grade backing store (Predastore)
 

@@ -2,15 +2,15 @@
 
 <!-- Overwrite-in-place. History lives in JOURNAL.md. -->
 
-Last updated: 2026-07-28 13:25 (P1.6 slice 1 DONE: admission-latency
-fix, differential-validated, 7x in-guest -- steady randwrite 592->4083
-IOPS, clat max 246 s -> 35.3 s; residual stall root-caused to the
-flushLocked Writes.mu hold, named as slice 2)
+Last updated: 2026-07-28 14:40 (P1.6 slices 2+3a DONE: batched flush
++ fsync off the WAL append path; in-guest clat max progression
+246 s -> 35.3 s -> 31.6 s -> 16.3 s, diag steady IOPS 329 -> 3440;
+slice 4 named: pipeline chunk assembly with the flush)
 Current phase: Phase -1 nearly done (6/9 [x], 1/9 [~]) + Phase 1 OPEN
 (P1.1 [~], P1.4 [~], P1.6 [~])
-Current slice: NEXT = P1.6 slice 2: bound the flush lock-hold (flush
-in batches releasing Writes.mu, or WAL appends off the lock) + WAL
-segment rotation; then re-rig and set the final latency bound.
+Current slice: NEXT = P1.6 slice 4: pipeline the drain (consume
+flushed batches into chunks immediately so blocked writers see
+headroom during, not after, the flush phase); then final bound + rig.
 
 ## NEEDS HUMAN
 
@@ -62,6 +62,21 @@ overlaps Phase 1 durability work and should be fixed on that branch.
   - feat/shard-healer-and-read-repair: availability probe + P-1.6
     baseline + s3-tests rig + P-1.7 frozen baseline. ACTIVE for Phase 2.
   - feat/s3-api-surface-completion: created, no commits yet (Phase 2).
+
+## What landed 2026-07-28 (8th drop): P1.6 slices 2+3a
+- Batched flush (commit df1b759): WAL appends off Writes.mu in
+  4096-block batches, SeqNum-exact removal (racing rewrites survive,
+  gated), flushMu, MarkPendingIfSeqNum, snapshot path via Flush().
+  Differential gate: old flush stalls concurrent writes 1:1 (634 ms ==
+  664 ms flush, FAIL); batched 14 ms vs 2.29 s flush (PASS). Suite
+  green 179.8 s.
+- WAL syncer fsync moved outside WAL.mu (commit 05064d6) -- giant
+  fsyncs no longer block every WAL append behind them.
+- In-guest: clat max 16.3 s (was 31.6 s post-slice-1-only... full
+  progression 246 -> 35.3 -> 31.6 -> 16.3 s), diag steady IOPS 3440,
+  matrix 4206/2262 rw. Artifact: viperblock/results/2026-07-28_p16_
+  slice2_slice3_flush_and_fsync.txt. Slice 4 named: drain pipelining
+  (headroom must appear DURING the flush phase, not after).
 
 ## What landed 2026-07-28 (7th drop): P1.6 admission-latency fix
 - viperblock branch fix/backpressure-write-admission-latency (cut from
@@ -122,14 +137,14 @@ overlaps Phase 1 durability work and should be fixed on that branch.
 - P-1.7 [x]: s3-tests baseline frozen 123/621/94 (Phase 2 floor).
 
 ## Next action
-1. P1.6 slice 2 (the F7 critical path continues): bound the flush
-   lock-hold -- flush in bounded batches releasing Writes.mu between
-   them (or move per-record WAL appends off the lock), plus WAL
-   segment rotation so syncer fsyncs stay bounded (evidence: probe
-   1:1 flush-duration == concurrent-write-stall; in-guest residual
-   clat max 35.3 s -- see 7th drop). Then re-run the vhost rig, set
-   the final 100 ms-class bound with the human, and run the deferred
-   s3-backed nbdkit-vs-vhost production pair.
+1. P1.6 slice 4 (the F7 critical path continues): pipeline the drain
+   -- consume flushed batches into chunk assembly/upload immediately
+   (or equivalent incremental hand-off in WriteWALToChunk) so a
+   writer blocked at the watermark sees per-chunk headroom DURING the
+   flush phase instead of after it (evidence: 16.3 s residual clat
+   max == flush-phase length; see 8th drop). Then re-run the vhost
+   rig, set the final 100 ms-class bound with the human, and run the
+   deferred s3-backed nbdkit-vs-vhost production pair.
 2. F2 next slice: promotion/recovery from replica WALs, reconnect/
    resync, degraded-mode policy; then close the acked-but-unflushed
    memory window (14.2% measured) via replicate-on-WriteAt or
