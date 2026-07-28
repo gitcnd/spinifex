@@ -2,7 +2,7 @@
 
 <!-- Overwrite-in-place. History lives in JOURNAL.md. -->
 
-Last updated: 2026-07-28 04:45 (two next-up tracks advanced: F2 peer replication in the barrier + F7 vhost-user QEMU smoke -- negotiation fully works, one remap wedge banked)
+Last updated: 2026-07-28 06:35 (mem-table remap fix landed + race-tested; QEMU wedge re-diagnosed via reference oracle -- empty serial is machine-config, our backend has an isolated 96%-CPU spin)
 v3 baseline, then automated NBD-race pre/post verification, then cluster
 shutdown; regression-runner validation also running; vhost-user codec +
 virtqueue slice landed with green unit tests)

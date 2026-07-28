@@ -140,6 +140,51 @@ Next (for whoever picks up remediation, NOT this chat): work the
 SECURITY_AUDIT_PRELIMINARY.md priority queue, reproduce each item before
 fixing. OPS-1 (rotate the working-tree token) is a human action.
 
+## 2026-07-28 06:30 -- MEM-TABLE REMAP FIX LANDED; QEMU WEDGE RE-DIAGNOSED
+##                     WITH A REFERENCE-BACKEND ORACLE (SPLIT IN TWO)
+Plan: fix the mem-table-remap-after-start wedge from the last smoke test.
+Done:
+- Remap fix implemented + committed (viperblock commit 0227dd0,
+  feat/data-path-vhost-user-blk): a queueAccessMutex serialises the
+  service goroutine's ring access against SET_MEM_TABLE; on a mem-table
+  change while running, old regions are munmapped and the live vring is
+  rebuilt from its stored user-addresses against the new mapping,
+  preserving the avail cursor. In-process functional test EXTENDED to
+  re-send SET_MEM_TABLE mid-stream then write/read-verify; green under
+  -race. This is correct and needed regardless of the QEMU issue.
+- BUT the remap fix did NOT clear the real-QEMU wedge -> re-diagnosed
+  properly with a REFERENCE ORACLE (methodology: independent trusted
+  tool). Ran the IDENTICAL qemu command against qemu-storage-daemon's
+  own vhost-user-blk export. Findings that split the problem cleanly:
+  (1) Empty guest serial happens with the REFERENCE backend too (0
+      bytes) -> the empty-serial signal is a MACHINE-CONFIG artifact
+      (q35 + memory-backend-memfd + this cloud image's console
+      routing), NOT my backend. My earlier "wedge" read over-relied on
+      serial as the success signal.
+  (2) CPU differs decisively: reference backend -> QEMU 16.7% CPU
+      (healthy/idle); my backend -> QEMU 96% CPU (a real spin my
+      backend provokes). So there IS a backend bug, isolated now.
+- RHEL qemu-kvm has NO vhost-user trace events compiled (--trace help
+  lists none; -D writes nothing), so QEMU-side tracing is unavailable
+  here -- the reference-backend diff is the right oracle instead.
+Failed/learned:
+- Don't trust a single success signal (serial) -- the reference oracle
+  showed it was measuring the wrong thing. Banked.
+- More && chains silently broke on non-zero pgrep/grep exits (no output,
+  no commit); ran pieces separately. The pidfile/pgrep-in-chain family
+  of traps is now costing real time -- switching to explicit loops and
+  separate verification commands.
+Metrics: ~45 min (timeboxed at the reference-oracle result).
+Fork movement: F7 candidate (b) advancing; still OPEN (needs in-guest
+  fio numbers, blocked on the spin bug + a real success signal).
+Next: (a) get a real success signal -- boot the reference-backend config
+  to SSH (add console=ttyS0 / try -nographic, or longer wait) so
+  "working" is observable; (b) find my backend's spin -- likely the
+  kick-eventfd read loop or a call-eventfd storm; diff my on-wire
+  behaviour against qemu-storage-daemon. Consider the ublk candidate as
+  a lower-friction path to the same F7 numbers (guest kernel 6.12 has
+  ublk).
+
 ## 2026-07-28 04:40 -- F7 QEMU SMOKE: NEGOTIATION FULLY WORKS; MEM-TABLE
 ##                     REMAP-AFTER-START WEDGE (SPIRAL-RULED, BANKED)
 Plan: drive the vhost-user backend from real QEMU (P-1.9 candidate b).

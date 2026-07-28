@@ -180,14 +180,22 @@ that must meet them -- never after the implementation.
       socket/memfd/eventfds: write/read-verify/flush) GREEN. Real-QEMU
       smoke test (commit d7dc4f9): host QEMU 7.2 has vhost-user-blk-pci;
       the FULL vhost-user negotiation completes (all message types
-      through SET_VRING_KICK + SET_VRING_ENABLE accepted). Wedge to fix
-      next session: QEMU busy-loops at 96% CPU (empty guest serial)
-      after a SECOND SET_MEM_TABLE issued post-queue-start -- the running
-      virtqueue is not remapped to the new regions; fix = remap live
-      vrings on mem-table change, confirm with QEMU's vhost-user trace.
-      REMAINING (the only remaining content of this box): land that
-      remap, boot the guest, run in-guest fio vhost-vs-NBD -> the F7
-      decision numbers. F7 stays OPEN until they exist.
+      through SET_VRING_KICK + SET_VRING_ENABLE accepted).       Mem-table remap-after-start
+      handled (commit 0227dd0: queueAccessMutex + live-vring rebuild,
+      race-tested in-process). Real-QEMU boot still not achieved;
+      re-diagnosed 2026-07-28 with a REFERENCE ORACLE (qemu-storage-
+      daemon's own vhost-user-blk export, identical qemu command):
+      empty guest serial occurs with the REFERENCE backend too (=
+      machine-config/console artifact, not our backend), but our backend
+      drives QEMU to 96% CPU vs the reference's 16.7% (= a real spin bug
+      isolated to our backend). RHEL qemu-kvm ships no vhost-user trace
+      events, so the reference-diff is the oracle.
+      REMAINING (the only remaining content of this box): (1) a real
+      success signal (boot the reference config to SSH -- console=ttyS0 /
+      -nographic), (2) fix our backend's QEMU-side spin (diff on-wire vs
+      qemu-storage-daemon), (3) in-guest fio vhost-vs-NBD = the F7
+      numbers. Also on the table: the ublk candidate (guest kernel 6.12
+      supports it) as a lower-friction path to the same numbers. F7 OPEN.
 
 ## Phase 0 -- Harness and regression infrastructure
 
