@@ -2,15 +2,15 @@
 
 <!-- Overwrite-in-place. History lives in JOURNAL.md. -->
 
-Last updated: 2026-07-28 10:55 (F7 wiring slice DONE: real WAL engine
-serves in-guest over vhost-user, transport exonerated at p99 65 us /
-burst 27-36k IOPS; engine drain-stall freezes single writes 246 s --
-gate P1.6 added, now the critical path)
+Last updated: 2026-07-28 13:25 (P1.6 slice 1 DONE: admission-latency
+fix, differential-validated, 7x in-guest -- steady randwrite 592->4083
+IOPS, clat max 246 s -> 35.3 s; residual stall root-caused to the
+flushLocked Writes.mu hold, named as slice 2)
 Current phase: Phase -1 nearly done (6/9 [x], 1/9 [~]) + Phase 1 OPEN
-(P1.1 [~], P1.4 [~]; P1.6 added 2026-07-28, not started)
-Current slice: NEXT = engine drain-stall fix (P1.6): bounded/async
-drains + write concurrency in viperblock, then re-run the vhost rig
-and the deferred s3 production pair.
+(P1.1 [~], P1.4 [~], P1.6 [~])
+Current slice: NEXT = P1.6 slice 2: bound the flush lock-hold (flush
+in batches releasing Writes.mu, or WAL appends off the lock) + WAL
+segment rotation; then re-rig and set the final latency bound.
 
 ## NEEDS HUMAN
 
@@ -63,6 +63,23 @@ overlaps Phase 1 durability work and should be fixed on that branch.
     baseline + s3-tests rig + P-1.7 frozen baseline. ACTIVE for Phase 2.
   - feat/s3-api-surface-completion: created, no commits yet (Phase 2).
 
+## What landed 2026-07-28 (7th drop): P1.6 admission-latency fix
+- viperblock branch fix/backpressure-write-admission-latency (cut from
+  main, pushed, commits 5e958b3 + b2a20d8): blocked writers now wait
+  for per-chunk headroom at the high watermark; the background
+  uploader owns drains; fail-fast contracts preserved. Unit gate test
+  with TRUE differential validation (old contract FAILS 4.65 s, new
+  PASSES 1.17 s); full suite green 185.8 s.
+- In-guest re-run (same rig, merge build): steady randwrite 6.9-7.0x
+  (592->4083 d1, 324->2261 d16), reads 2.3-2.6x, clat max 246 s ->
+  35.3 s, p99 65 us unchanged, integrity green, raw control unchanged.
+  Artifact: viperblock/results/2026-07-28_p16_backpressure_admission_
+  fix.txt.
+- Residual 35 s stall root-caused by probe: flushLocked holds
+  Writes.mu for the whole flush (flush 724.7 ms == concurrent write
+  max 721.5 ms, 1:1). Slice 2 named in P1.6: bounded flush batches +
+  WAL segment rotation.
+
 ## What landed 2026-07-28 (6th drop): F7 production wiring + evidence
 - vhost-user-blk-serve now serves the REAL viperblock WAL engine
   (--vb-backend file|s3): production open sequence, ErrZeroBlock
@@ -105,12 +122,14 @@ overlaps Phase 1 durability work and should be fixed on that branch.
 - P-1.7 [x]: s3-tests baseline frozen 123/621/94 (Phase 2 floor).
 
 ## Next action
-1. Engine drain-stall fix (gate P1.6, the F7 critical path): bounded/
-   asynchronous drains + write concurrency so no single write waits on
-   a full synchronous drain (evidence: 246 s clat max, burst 27-36k
-   IOPS vs steady 592/324 -- see 6th drop). Then re-run the vhost rig
-   (engine vs raw) and the deferred s3-backed nbdkit-vs-vhost
-   production pair.
+1. P1.6 slice 2 (the F7 critical path continues): bound the flush
+   lock-hold -- flush in bounded batches releasing Writes.mu between
+   them (or move per-record WAL appends off the lock), plus WAL
+   segment rotation so syncer fsyncs stay bounded (evidence: probe
+   1:1 flush-duration == concurrent-write-stall; in-guest residual
+   clat max 35.3 s -- see 7th drop). Then re-run the vhost rig, set
+   the final 100 ms-class bound with the human, and run the deferred
+   s3-backed nbdkit-vs-vhost production pair.
 2. F2 next slice: promotion/recovery from replica WALs, reconnect/
    resync, degraded-mode policy; then close the acked-but-unflushed
    memory window (14.2% measured) via replicate-on-WriteAt or
@@ -129,8 +148,8 @@ overlaps Phase 1 durability work and should be fixed on that branch.
 ## Gate snapshot
 Phase -1: 6/9 [x] (P-1.1, P-1.3, P-1.4, P-1.5, P-1.7, P-1.9) + 1/9 [~]
 (P-1.6) + open: P-1.2, P-1.8 . P0: 0/4 ticked (P0.2 runner exists,
-validated 6/6 today; s3-tests subset still missing) . P1: 2/6 [~]
-(P1.1, P1.4; P1.6 added 2026-07-28) . P2: 0/5 . P3: 0/6 . P4: 0/6 .
+validated 6/6 today; s3-tests subset still missing) . P1: 3/6 [~]
+(P1.1, P1.4, P1.6 slice 1 done) . P2: 0/5 . P3: 0/6 . P4: 0/6 .
 P5: 0/4
 
 ## Standing reminders

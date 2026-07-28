@@ -255,7 +255,7 @@ that must meet them -- never after the implementation.
       box): the volatile-cache FUSE loss-count rig, and the barrier
       extending over F2 peer replication when the transport lands.
 - [ ] P1.5 Human notified: Phase 1 checkpoint review.
-- [ ] P1.6 Sustained-write stalls bounded (ADDED 2026-07-28, in the
+- [~] P1.6 Sustained-write stalls bounded (ADDED 2026-07-28, in the
       open): under >= 60 s of sustained 4 KiB random writes through the
       served path, no single write exceeds a stated latency bound
       (bound set from baseline + the F2 latency/durability trade,
@@ -269,6 +269,23 @@ that must meet them -- never after the implementation.
       the P-1.5(i) drain-stall (max 175-420 s) as a guest-visible
       freeze. Previously only a STATUS backlog note; it gates Phase 1
       because "EBS-grade" excludes minutes-long I/O freezes.
+      -> SLICE 1 DONE (2026-07-28): admission-latency fix landed
+      (viperblock fix/backpressure-write-admission-latency commits
+      5e958b3 + b2a20d8, evidence viperblock/results/2026-07-28_p16_
+      backpressure_admission_fix.txt): writers released on per-chunk
+      headroom at the high watermark; unit gate test with TRUE
+      DIFFERENTIAL validation (old contract FAILS 4.65 s, new PASSES
+      1.17 s); full suite green. In-guest re-run: steady randwrite
+      592 -> 4083 IOPS d1 (6.9x), clat max 246 s -> 35.3 s (7x), p99
+      65 us unchanged, integrity green.
+      REMAINING (the only remaining content of this box): the residual
+      35 s stall is a DIFFERENT mechanism, root-caused by probe --
+      flushLocked holds Writes.mu for the whole flush (flush 724.7 ms
+      == concurrent WriteAt max 721.5 ms at 65k records; scales to
+      ~35 s in-guest with multi-GiB WAL + syncer fsyncs). Next slice:
+      bounded flush batches (release Writes.mu between batches) +/or
+      WAL appends off the lock, WAL segment rotation; then set the
+      final numeric bound with the human and re-run this rig.
 
 ## Phase 2 -- EBS-grade backing store (Predastore)
 

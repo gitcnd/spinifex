@@ -140,6 +140,64 @@ Next (for whoever picks up remediation, NOT this chat): work the
 SECURITY_AUDIT_PRELIMINARY.md priority queue, reproduce each item before
 fixing. OPS-1 (rotate the working-tree token) is a human action.
 
+## 2026-07-28 13:20 -- P1.6 SLICE 1: ADMISSION-LATENCY FIX LANDED WITH
+##                     TRUE DIFFERENTIAL VALIDATION; 7x IN-GUEST; RESIDUAL
+##                     STALL ROOT-CAUSED TO THE FLUSH LOCK-HOLD
+Plan: STATUS next-action 1 -- the P1.6 drain-stall fix.
+Done:
+- Mechanism mapped by reading: WriteAtCtx buffers + awaitBackpressure;
+  the crossing writer drove a FULL DrainToBackendCtx inline and waited
+  for the LOW watermark (high/2) -- a 128 MiB admission quantum.
+  pendingBytes falls PER UPLOADED CHUNK (createChunkFile), so headroom
+  exists incrementally; the old loop just refused to use it.
+- Fix (viperblock fix/backpressure-write-admission-latency, cut from
+  main, commit 5e958b3): writers wait only for pending <= high;
+  background uploader owns drains when running (new signalDrainWanted
+  pokes it unconditionally; backgroundDrainerRunning atomic); inline
+  full-drain fallback kept for embedders with no uploader; ErrNoSpace
+  and 10-consecutive-failure write-abort contracts preserved via the
+  DrainToBackendCtx choke point (new consecutiveDrainFailures atomic).
+  Old backpressure tests kept (fallback path still drains fully); the
+  old blocks-then-releases test's contract note rewritten in the open.
+- TRUE DIFFERENTIAL GATE TEST (the lesson of the day): first version
+  of the new gate test PASSED ON THE OLD CODE (16-wide parallel
+  uploads made a full drain ~1 batch; old 1.04 s vs new 1.2 s --
+  indistinguishable). Serialized uploads (UploadWorkers: 1) in the
+  helper; then old FAILS at 4.65 s, new PASSES at 1.17 s (-race).
+  Bound set at 2.0 s from those two measurements (~2x above pass,
+  ~2.3x below fail). Full suite green (185.8 s) after restoring the
+  exact old error-message phrasing one enospc test greps for.
+- In-guest verification (same rig, serve built from vhost c28dfbe +
+  fix via throwaway merge worktree): steady randwrite 592 -> 4083
+  IOPS d1, 324 -> 2261 d16 (both ~7x); reads 2.3-2.6x; clat max
+  246 s -> 35.3 s; p99 65 us and burst 27.3k unchanged; raw-file
+  control unchanged (34.9-36.8k); integrity green; matrix wall time
+  8+ min -> 99 s. Artifact: viperblock/results/2026-07-28_p16_
+  backpressure_admission_fix.txt (commit b2a20d8).
+- Residual 35 s stall root-caused by a discriminating probe (temp
+  test, deleted; numbers in the artifact): flushLocked holds
+  Writes.mu for the ENTIRE flush -- flush of 65,536 records took
+  724.7 ms while a concurrent WriteAt's max latency was 721.5 ms
+  (pre-flush max 49 us). 1:1 signature. At in-guest scale (multi-GiB
+  WAL file, 200 ms syncer fsyncs, concurrent chunk assembly) that
+  phase stretches to ~35 s. P1.6 marked [~]; next slice named:
+  bounded flush batches / WAL appends off the lock + WAL segment
+  rotation.
+Failed/learned:
+- A gate test is not a gate until it fails on the old behavior. The
+  differential run caught a non-discriminating test that unit-green
+  alone would have shipped as false confidence. Banked as standing
+  practice for every fix-verification test.
+- Averages hid everything again: steady-state IOPS improved 7x while
+  p99 and burst were IDENTICAL pre/post -- only max/distribution
+  showed both the improvement and the remaining defect.
+Metrics: session ~2.5 h; suite 185.8 s; in-guest matrix 99 s + 30 s
+diag; probe 1.4 s.
+Fork movement: none (F7 stands; its critical-path qualifier advanced).
+Next: P1.6 slice 2 (flush lock-hold bounding + WAL rotation), then
+re-rig and set the final bound; then the deferred s3 production pair;
+F2 promotion/reconnect slice still queued.
+
 ## 2026-07-28 10:50 -- F7 PRODUCTION WIRING: REAL ENGINE SERVES IN-GUEST
 ##                     OVER VHOST-USER; TRANSPORT EXONERATED; DRAIN-STALL
 ##                     IS THE CRITICAL PATH (P1.6 ADDED)
