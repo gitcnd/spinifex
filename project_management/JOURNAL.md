@@ -140,6 +140,40 @@ Next (for whoever picks up remediation, NOT this chat): work the
 SECURITY_AUDIT_PRELIMINARY.md priority queue, reproduce each item before
 fixing. OPS-1 (rotate the working-tree token) is a human action.
 
+## 2026-07-28 10:15 -- RESUMED AFTER IDE CRASH (NEW AGENT); F7 ACKED ->
+##                     DECIDED; DOCS REFRESHED
+Plan: (new agent) consume temp_resume_handoff.md, verify ground state,
+confirm green baseline, record the human's F7 ack, fix doc drift.
+Done:
+- State verification: all three repos exactly at the handoff's HEADs
+  (spinifex project-management 012fcd72, viperblock a2fc287, predastore
+  72c6269), trees clean, every local branch byte-identical to its
+  gitcnd fork ref, no orphaned processes (exact-name pgrep sweep).
+- Regression runner 6/6 PASS in 6m23s (spinifex-unit 67s,
+  daemon-hermetic 26s, integration 2s, viperblock-unit 192s,
+  predastore-unit 82s, crashharness-smoke 14s). Baseline green.
+- F7 DECIDED: human ack recorded verbatim in DECISIONS.md ("It is a
+  "1b ack" from me ... and also an F7-ack ... please get going!").
+  vhost-user-blk is the VM data path; production wiring starts now.
+- OPS-1 resolved as NO-OP per human direction (verbatim in the audit
+  file): fork-scoped token, revoked after the work, merge-back
+  reviewed. Remediation queue updated.
+- Doc drift fixed: STATUS rewritten (stale header lines, gate snapshot
+  1/8 -> 6/9 [x], next-action queue refreshed from the handoff);
+  temp_resume_handoff.md retired (consumed; authoritative state lives
+  in STATUS again); stale /tmp/vb-main-worktree pruned from viperblock.
+Failed/learned:
+- The ENVIRONMENT.md pgrep-self-match trap bit the FIRST verification
+  command of the resume (pgrep -f matched the invoking shell's command
+  line). Cost seconds instead of an investigation because the trap was
+  banked -- the traps file earns its keep on day one of a new agent.
+Metrics: full re-orientation (work-log + 13 methodology docs + working
+docs + state verification + 6/6 runner) ~35 min wall.
+Fork movement: F7 LEANING (b) -> DECIDED (human ack).
+Next: wire the real viperblock WAL engine behind the vhost-user backend
+(serve mode), boot the rig guest against it, re-run in-guest fio
+(STATUS next-action 1).
+
 ## 2026-07-28 09:10 -- F7 DECIDED BY EVIDENCE: VHOST-USER-BLK BOOTS REAL
 ##                     QEMU AND IS ~1.8x NBD IN-GUEST (P-1.9 [x])
 Plan: chase the "next path" -- get the vhost-user backend booting a real

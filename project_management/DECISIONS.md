@@ -144,12 +144,16 @@ Evidence: token probes 2026-07-27 (GET /user 200; gitcnd/spinifex
 Revisit trigger: human forks the two sibling repos or widens the token.
 
 ## F7 -- Guest block-device data path (replace nbdkit)  [MAJOR]
-Status: LEANING (b) vhost-user-blk (2026-07-28, on in-guest fio evidence
-  below; MAJOR, so human ack still required to move to DECIDED)
-Decision: (pending human ack) option (b) vhost-user-blk as the VM data
-  path, with (a) native Go NBD retained for host-side attach. A working
-  pure-Go vhost-user-blk backend exists (viperblock branch
-  feat/data-path-vhost-user-blk) and is measured decisively faster.
+Status: DECIDED (2026-07-28, human ack verbatim: "It is a "1b ack" from
+  me @project_management/STATUS.md:23-26  and also an F7-ack - is that
+  enough info for you to resume work now?  If yes - please get going!"
+  -- referencing STATUS NEEDS-HUMAN item 1b, which requested exactly
+  this ack)
+Decision: option (b) vhost-user-blk as the VM data path, with (a) native
+  Go NBD retained for host-side attach. A working pure-Go vhost-user-blk
+  backend exists (viperblock branch feat/data-path-vhost-user-blk) and
+  is measured decisively faster. Production wiring (real viperblock WAL
+  engine behind the backend) starts 2026-07-28.
 Context: today guest virtio-blk -> QEMU NBD client -> socket -> nbdkit
   (C shim) -> Go plugin -> viperblock. Every IO pays protocol framing,
   extra copies, and a process hop. Candidates, cheapest first:

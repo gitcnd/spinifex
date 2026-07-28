@@ -53,7 +53,7 @@ predastore [security review](42c6cace-86ea-4db3-9bcf-be4bda9404c1).
 
 ## Operational / hygiene (not product-runtime, but do first)
 
-### OPS-1 -- Live access token present in the working tree  [HIGH]
+### OPS-1 -- Live access token present in the working tree  [HIGH -> RESOLVED NO-OP]
 - Where: `spinifex/.env` (lines 1-2). Confirmed gitignored and NOT in git
   history (`git log --all -- .env` empty), so it did not leak via the repo.
 - Concern: a live fine-grained token sits in plaintext on disk in the
@@ -64,6 +64,13 @@ predastore [security review](42c6cace-86ea-4db3-9bcf-be4bda9404c1).
   such tokens at runtime from a secret store or CI secret rather than a
   checked-out file. This is the token the automation uses to push to the
   gitcnd/* forks, so coordinate rotation with that workflow.
+- RESOLVED AS NO-OP (2026-07-28, human direction verbatim): "OPS-1 is not
+  relevant. We're doing work inside a repo fork and access will be removed
+  after the work is done, and any merge back into the master later will be
+  checked as well, so, save to update OPS-1 as a no-op." The token is
+  scoped to the gitcnd/* work forks only, will be revoked when the work
+  completes, and merges back to master get reviewed -- accepted risk, no
+  action required.
 
 ---
 
@@ -551,7 +558,8 @@ authentication and streaming-upload integrity/limits.
 
 Confirm-then-fix each; write the repro before the fix.
 
-1. OPS-1  rotate the working-tree token (minutes; do first).
+1. OPS-1  RESOLVED NO-OP 2026-07-28 (human: fork-scoped token, revoked
+          after the work; merge-back reviewed). No action.
 2. VB-1   Close-after-failed-drain data loss (CRITICAL, durability).
 3. PD-1 + PD-2  mutual TLS on QUIC + Raft (CRITICAL, or document the
          trusted-network requirement explicitly as an interim).

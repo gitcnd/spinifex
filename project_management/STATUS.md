@@ -2,143 +2,127 @@
 
 <!-- Overwrite-in-place. History lives in JOURNAL.md. -->
 
-Last updated: 2026-07-28 09:10 (F7 vhost-user-blk boots real QEMU and is ~1.8x NBD in-guest -- P-1.9 [x], F7 LEANING (b), human ack pending)
-v3 baseline, then automated NBD-race pre/post verification, then cluster
-shutdown; regression-runner validation also running; vhost-user codec +
-virtqueue slice landed with green unit tests)
-Current phase: Phase -1 nearly done (5/9 [x], 2/9 [~]) + Phase 1 OPENED (P1.4 [~])
-Current slice: F7 vhost-user skeleton (viperblock commit a783271):
-protocol codec + split-ring parsing, 5 unit tests, no QEMU needed yet.
-Overnight chain artifacts will land in /tmp/overnight/ (chain.log,
-s3tests_baseline3.txt, race_results.txt, CHAIN_DONE sentinel).
-NOTE: v2 "crash" was my harness bug (pytest thread-timeouts abort the
-run) plus a self-matching watcher; both fixed and banked.
+Last updated: 2026-07-28 10:15 (new agent resumed after the IDE crash:
+state verified, regression runner 6/6 green, F7 ACKED -> DECIDED,
+OPS-1 no-op per human; production engine wiring behind vhost-user
+starting)
+Current phase: Phase -1 nearly done (6/9 [x], 1/9 [~]) + Phase 1 OPENED
+(P1.1 [~], P1.4 [~])
+Current slice: F7 production wiring -- real viperblock WAL engine behind
+the vhost-user-blk backend (serve mode), guest boot, in-guest fio.
 
 ## NEEDS HUMAN
 
 Nothing blocking. Non-blocking queue:
-1. REVIEW: F0/F1 closed by your delegation (DECISIONS.md) -- Outposts
-   parity = service-set first then thin outposts.* API; "predastore as
-   EBS" = harden the whole Viperblock+Predastore stack. Object if wrong.
-1a. RESOLVED: F2 acked. 1b. ACK REQUESTED (MAJOR fork F7): adopt vhost-user-blk as the VM data path -- measured ~1.8x NBD writes in-guest (DECISIONS.md F7). "Go" lets us wire the viperblock engine behind it as the production path.
-   synchronous peer WAL replication is DECIDED. Phase 1 implementation
-   unblocked and started (first slice: durable Flush barrier, P1.4).
-2. RESOLVED 2026-07-27 07:45: human granted the token read+write on
-   gitcnd/{spinifex,viperblock,predastore}; all storage branches + the
-   v1.13.0 tag pushed to gitcnd/viperblock and gitcnd/predastore.
-   NOTE (standing, low priority): these are PLAIN repos, not GitHub
-   forks, so they cannot open PRs against mulgadc/* directly. If
-   upstreaming becomes the goal: delete them, click Fork on the mulgadc
-   repos, re-add to token, and I re-push (identical history, 2 minutes).
-3. RESOLVED 2026-07-27: the wildcard-DNS quirk was fixed by the human;
-   verified (nonexistent hostnames now NXDOMAIN). services/viperblockd
-   now passes normally, CONFIRMING its DNS attribution. However
-   spinifex/daemon TestClusterManager_TLSServesHTTPS STILL fails on the
-   host (3/3) -- my original DNS attribution for that one was WRONG
-   (corrected in the P-1.1 gate note). Cause unknown; standalone TLS
-   replica is 2 ms, test passes in netns. Open triage item (non-blocking;
-   suspect the daemon TestMain fixtures' interaction with the host
-   network). May be an upstream-reportable flake once root-caused.
-4. Root access still only needed later for bridged VM networking.
-5. RAM budget assumption stands: VMs capped at 16 GiB.
-6. NVMe pair: destructive use permitted? Needed by the perf phases.
-7. Optional: throwaway real AWS account for golden captures (fork F4).
+1. REVIEW (standing): F0/F1 were closed by delegated judgment call
+   (DECISIONS.md) -- Outposts parity = service-set first then thin
+   outposts.* API; "predastore as EBS" = harden the whole
+   Viperblock+Predastore stack. Object if wrong.
+2. NVMe pair (2x 1.9 TB, idle isw_raid members): destructive use
+   permitted? Needed by the realistic-performance phases.
+3. Optional: throwaway real AWS account for golden captures (fork F4).
+4. Root access only needed later for bridged VM networking (P-1.2 can
+   start with user networking).
+5. Standing, low priority: gitcnd/{viperblock,predastore} are plain
+   repos, not GitHub forks, so they cannot open PRs against mulgadc/*.
+   If upstreaming becomes the goal: delete them, click Fork on the
+   mulgadc repos, re-add to token, re-push (identical history, 2 min).
+RESOLVED 2026-07-28: F7 ACKED by the human (verbatim in DECISIONS.md
+F7) -- vhost-user-blk is the VM data path. F2 was acked earlier the
+same day. OPS-1 (token rotation) resolved as NO-OP per human direction
+(fork-scoped token, revoked after the work, merge-back reviewed).
 
 ## Security audit (2026-07-27, read-only, forked chat)
-A preliminary hardening review landed at
-project_management/SECURITY_AUDIT_PRELIMINARY.md (no code changed) --
-handoff for a later remediation agent, priority queue inside.
-HUMAN ACTION (OPS-1): rotate/revoke the working-tree .env token; it is
-the automation's push token, so coordinate with the fork workflow.
+Preliminary hardening review at
+project_management/SECURITY_AUDIT_PRELIMINARY.md (no code changed);
+remediation queue inside. Three findings have committed reproducers
+(SP-2 IAM condition drop, VB-1 close-after-failed-drain data loss,
+VB-4 secret-key logging). OPS-1 resolved as no-op (see above). VB-1
+overlaps Phase 1 durability work and should be fixed on that branch.
 
 ## Branch map (fork F6)
 
 - spinifex (pushed to fork gitcnd/spinifex):
   - project-management: working documents (this folder).
   - feat/ebs-volume-types-and-snapshot-api, feat/ebs-qos-enforcement,
-    feat/outposts-service-parity: created, no commits yet.
+    feat/outposts-service-parity: created, no commits yet (Phase 3/4).
 - ../viperblock (pushed to gitcnd/viperblock):
-  - feat/crash-consistency-harness: P-1.3 harness + 25-cycle evidence
-    (commits 8723789, 40b9ef8). ACTIVE.
-  - feat/replicated-wal-durability: Phase 1 core (awaits F2 evidence).
-  - (planned when F7 evidence lands): feat/data-path-vhost-user-blk or
-    feat/data-path-ublk, per gate P-1.9.
+  - feat/data-path-vhost-user-blk: F7 winner -- pure-Go vhost-user-blk
+    backend, boots real QEMU, ~1.8x NBD in-guest. ACTIVE (production
+    engine wiring).
+  - feat/replicated-wal-durability: Phase 1 -- SyncOnFlush barrier +
+    walrepl peer replication (both landed, suite green).
+  - feat/crash-consistency-harness: P-1.3 harness + strace evidence +
+    perfbench (P-1.5).
+  - feat/data-path-native-nbd-server: P-1.9 candidate (a), measured.
+  - fix/nbd-close-open-race: lifecycle mutex fix (stands on mechanism
+    + 70 clean post-fix cycles; differential repro closed 0/40).
 - ../predastore (pushed to gitcnd/predastore):
   - feat/shard-healer-and-read-repair: availability probe + P-1.6
-    baseline (commit dbe31cf). ACTIVE.
-  - feat/s3-api-surface-completion.
+    baseline + s3-tests rig + P-1.7 frozen baseline. ACTIVE for Phase 2.
+  - feat/s3-api-surface-completion: created, no commits yet (Phase 2).
 
-## What landed 2026-07-27 (3rd drop): Phase -1 first evidence
-- P-1.1 [x]: unit suite green as union of normal + hermetic-netns modes
-  (every failure environment-attributed: wildcard DNS vs missing real
-  interfaces); integration tier ok in 12.178 s. JOURNAL entry 3.
-- P-1.3 [~, SIGKILL leg done]: crash harness (viperblock public API only,
-  production open/recover sequence) -- 25 kill cycles, 249635 acked
-  writes, 136 flush barriers, 0 flushed writes lost, 0 corrupt, 35401
-  acked-unflushed lost = 14.2% memory-ack window. Remaining: power-loss
-  leg (VM/QMP), because code reading shows vb.Flush() does NOT fsync (only
-  the 200 ms background syncer does) -- guest fsync likely not power-loss
-  durable; headline Phase 1 fix target.
-- Lesson banked: the harness initially FALSELY accused viperblock of
-  losing flushed writes -- cross-session flush accounting bug in the
-  harness's own parser, found via discriminating experiments (copy-verify,
-  pause-writes, no-replay probe, backend md5 diff). JOURNAL entry 4.
+## What landed 2026-07-28 (5th drop): resume + F7 decided
+- IDE-crash handoff consumed: state re-verified (all branches pushed,
+  local==fork byte-identical, trees clean, no orphans), regression
+  runner 6/6 green in 6m23s (spinifex-unit 67s, daemon-hermetic 26s,
+  integration 2s, viperblock 192s, predastore 82s, crashharness 14s).
+- F7 MAJOR fork DECIDED on human ack; OPS-1 no-op per human direction;
+  STATUS drift fixed; temp_resume_handoff.md retired (content here);
+  stale /tmp/vb-main-worktree pruned.
 
-## What landed 2026-07-27 (2nd drop): autonomy wiring
-- F0/F1 decided by delegation; F6 git workflow decided; 4 branches pushed
-  to gitcnd/spinifex; siblings cloned at v1.13.0 with local branches.
-
-## What landed 2026-07-27 (1st drop): project instantiation
-- Research, machine audit, phased plan, fork registry. JOURNAL entry 1.
+## What landed 2026-07-28 (4th drop): F7 evidence + Phase 1 slices
+- P-1.9 [x]: vhost-user-blk boots real QEMU 7.2 + Debian 13 guest to
+  SSH; /dev/vdb 16 MiB round-trip byte-identical; in-guest fio, same
+  raw backend: vhost 28.5k randwrite IOPS vs nbdkit 15.7k (~1.8x),
+  reads ~1.35x. Bugs fixed en route: bootindex, SET_VRING_NUM parse.
+- P1.4 [~]: SyncOnFlush durable barrier landed + strace-verified on the
+  served path (24 fsyncs across 20 barriers where pre-fix code
+  produced zero across 50 flushes).
+- P1.1 [~]: walrepl synchronous peer replication wired into the flush
+  barrier; replica-WAL-byte-identical test green; fail-closed barrier.
+- P-1.7 [x]: s3-tests baseline frozen 123/621/94 (Phase 2 floor).
 
 ## Next action
-1. When the s3-tests watcher fires: freeze v2 counts (ticks P-1.7,
-   commit results to predastore tools/s3tests/), THEN verify the NBD
-   race fix pre/post with tests/nbd-race/nbd-race-repro.sh on the freed
-   cluster, and stop the cluster.
-2. F7 vhost-user-blk implementation start per
-   F7_VHOST_USER_BLK_DESIGN_NOTE.md (pure Go, single queue); the rig VM
-   at ../vm-images/rig-node1.qcow2 (SSH key rig_ssh_key, port 2222) is
-   ready to bench it. Add -cpu host if the guest ever needs /dev/kvm.
-3. P0.2 groundwork: one-command regression runner tying spinifex unit +
-   integration, viperblock, predastore, crashharness smoke together.
-4. P2.3 note for Phase 2: make predastore answer ListObjectVersions
-   with NotImplemented (or a real unversioned shape) instead of an
-   empty 200 -- the empty 200 silently defeats client fallbacks.
-2. P-1.3 power-loss leg: QEMU guest (user networking, /usr/libexec/
-   qemu-kvm) running the writer against an NBD-served volume; QMP quit
-   mid-write; verify. Proves/disproves the Flush-no-fsync loss window
-   (code reading says vb.Flush does not fsync -- 200 ms syncer only).
-3. Human acks queued: F2 (peer replication -- see NEEDS HUMAN 1a).
-4. P-1.7: fetch ceph/s3-tests, baseline against the loopback cluster.
-5. When opening Phase 2: extend its gates per the P-1.6 implication --
-   failure detection, read shortcutting, degraded/quorum writes, and
-   bucket-metadata failover, in addition to the healer (JOURNAL entry 5).
-6. Phase 1 scope note (from the P-1.5 baseline): the drain-stall problem
-   (writes blocked for minutes under sustained load) joins durability as
-   a Phase 1 target -- likely bounded write-buffer + async drain tuning.
-7. Backlog: golden-response harness design (P0.3); P-1.6 wiped-store
-   variant when healer work starts.
-8. BUG backlog (found by the P-1.5 rig, belongs on the durability
-   branch): nbdkit-plugin reconnect after an unclean client disconnect
-   triggers WAL recovery that fails on a missing local checkpoints
-   directory ("open .../checkpoints/blocks.00000000.bin: no such file")
-   leaving the volume unserveable for that connection. Reproduce: seed
-   fresh base_dir with createvol-s3, connect+disconnect qemu-img bench
-   twice. Also: qemu reconnect robustness deserves its own test.
+1. IN PROGRESS: wire the REAL viperblock WAL engine (not the raw-file
+   demo engine) behind the vhost-user backend as a serve mode; boot the
+   guest against it; re-run in-guest fio. Watch DECISIONS F7 qualifier
+   1: the engine REGRESSES writes at depth (global WAL write lock) --
+   transport alone will not show the win end to end; measure and
+   record honestly, then pair with engine write-concurrency work.
+2. F2 next slice: promotion/recovery from replica WALs, reconnect/
+   resync, degraded-mode policy; then close the acked-but-unflushed
+   memory window (14.2% measured) via replicate-on-WriteAt or
+   WAL-on-ack.
+3. Phase 2 (predastore) when opened: healer + read-repair + degraded/
+   quorum writes + metadata failover (P-1.6: 1 node down = writes 0%,
+   reads 100% but ~2320x slower); then the S3 surface gaps (CopyObject,
+   DeleteObjects, AbortMultipartUpload over HTTP, versioning).
+4. Backlog: P-1.2 single-node VM deploy (rig VM ready at
+   ../vm-images/rig-node1.qcow2, key rig_ssh_key); volatile-cache FUSE
+   loss-count rig (P1.4 remainder); P0.3 golden-response harness;
+   drain-stall fix (Phase 1 target, from P-1.5: writes stall minutes
+   under sustained load); s3-tests subset suite into the regression
+   runner (P0.2 remainder); VB-1 security fix on the durability branch.
 
 ## Gate snapshot
-Phase -1: 1/8 [x] (P-1.1) + 2/8 [~] (P-1.3 SIGKILL leg, P-1.6
-availability leg) . P0: 0/4 . P1: 0/5 . P2: 0/5 . P3: 0/6 . P4: 0/6 .
-P5: 0/4
+Phase -1: 6/9 [x] (P-1.1, P-1.3, P-1.4, P-1.5, P-1.7, P-1.9) + 1/9 [~]
+(P-1.6) + open: P-1.2, P-1.8 . P0: 0/4 ticked (P0.2 runner exists,
+validated 6/6 today; s3-tests subset still missing) . P1: 2/5 [~]
+(P1.1, P1.4) . P2: 0/5 . P3: 0/6 . P4: 0/6 . P5: 0/4
 
 ## Standing reminders
 - ALL go commands: GOTOOLCHAIN=auto. Baselines additionally GOWORK=off.
-- Unit suites: normal mode EXCEPT daemon + services/viperblockd which
-  need hermetic netns (`unshare -r -n` + lo up) -- wildcard-DNS trap.
+- GOFIPS140=v1.0.0 for ANY binary embedding viperblock (fipsboot panic
+  otherwise).
+- Unit suites: normal mode EXCEPT spinifex/daemon which needs hermetic
+  netns (`unshare -r -n` + lo up) -- TLS-test stall, cause under triage.
 - NEVER print or commit the .env token; source .env inline per push.
 - Feature branches cut from main (220141b1), not from project-management.
-- Sibling repo work stays on local branches until the human forks.
-- Shared, loaded machine: VMs <= 16 GiB, kill orphans, nothing
-  destructive without explicit ask.
+- Shared, loaded machine: VMs <= 16 GiB, kill orphans (pgrep -x, never
+  pkill -f with self-matching patterns), nothing destructive without
+  explicit ask.
+- One-command regression: project_management/tools/run_regressions.sh.
+- Predastore dev cluster without root: see ENVIRONMENT.md traps
+  (pd-shim + SSL_CERT_FILE recipe).
 - No validation artifact, no claim.
