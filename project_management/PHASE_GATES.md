@@ -211,10 +211,13 @@ that must meet them -- never after the implementation.
       active WAL (error-returning barrier sync, both legacy + sharded),
       enabled in the nbdkit plugin; behavioural tests assert the
       dirty-flag contract both ways; full engine suite green (181 s).
-      REMAINING (the only remaining content of this box): strace
-      re-verification through a served volume (blocked until the
-      cluster frees), the volatile-cache FUSE loss-count rig, and the
-      barrier extending over F2 peer replication when it lands.
+      -> strace re-verification DONE (2026-07-28, viperblock commit
+      5b2c797, tests/crashharness/results/2026-07-28_flush_barrier_
+      verified.txt): 20 interleaved write+flush pairs -> 24 fsyncs
+      (was ZERO across 50 flushes pre-fix); empty barriers correctly
+      skip the sync. REMAINING (the only remaining content of this
+      box): the volatile-cache FUSE loss-count rig, and the barrier
+      extending over F2 peer replication when the transport lands.
 - [ ] P1.5 Human notified: Phase 1 checkpoint review.
 
 ## Phase 2 -- EBS-grade backing store (Predastore)
