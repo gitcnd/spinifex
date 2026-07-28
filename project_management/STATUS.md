@@ -2,14 +2,15 @@
 
 <!-- Overwrite-in-place. History lives in JOURNAL.md. -->
 
-Last updated: 2026-07-28 10:15 (new agent resumed after the IDE crash:
-state verified, regression runner 6/6 green, F7 ACKED -> DECIDED,
-OPS-1 no-op per human; production engine wiring behind vhost-user
-starting)
-Current phase: Phase -1 nearly done (6/9 [x], 1/9 [~]) + Phase 1 OPENED
-(P1.1 [~], P1.4 [~])
-Current slice: F7 production wiring -- real viperblock WAL engine behind
-the vhost-user-blk backend (serve mode), guest boot, in-guest fio.
+Last updated: 2026-07-28 10:55 (F7 wiring slice DONE: real WAL engine
+serves in-guest over vhost-user, transport exonerated at p99 65 us /
+burst 27-36k IOPS; engine drain-stall freezes single writes 246 s --
+gate P1.6 added, now the critical path)
+Current phase: Phase -1 nearly done (6/9 [x], 1/9 [~]) + Phase 1 OPEN
+(P1.1 [~], P1.4 [~]; P1.6 added 2026-07-28, not started)
+Current slice: NEXT = engine drain-stall fix (P1.6): bounded/async
+drains + write concurrency in viperblock, then re-run the vhost rig
+and the deferred s3 production pair.
 
 ## NEEDS HUMAN
 
@@ -62,6 +63,26 @@ overlaps Phase 1 durability work and should be fixed on that branch.
     baseline + s3-tests rig + P-1.7 frozen baseline. ACTIVE for Phase 2.
   - feat/s3-api-surface-completion: created, no commits yet (Phase 2).
 
+## What landed 2026-07-28 (6th drop): F7 production wiring + evidence
+- vhost-user-blk-serve now serves the REAL viperblock WAL engine
+  (--vb-backend file|s3): production open sequence, ErrZeroBlock
+  translation, drain+close on SIGTERM (verified live), volume persists
+  across close/reopen. Adapter test green under -race. viperblock
+  commits bee3b5b + c28dfbe, pushed.
+- In-guest evidence (one boot, engine and raw devices side by side):
+  integrity green; transport EXONERATED (p99 write 65 us, burst
+  27.3-36.2k IOPS ~ raw ceiling 35.4k) but steady-state randwrite
+  592/324 IOPS d1/d16 -- single writes stall up to 246 s behind the
+  synchronous backpressure drain (P-1.5(i) drain-stall, now proven
+  guest-visible). Artifact: viperblock vhostuser/results/2026-07-28_
+  inguest_fio_real_engine_vs_raw_vhost.txt.
+- Gate P1.6 added in the open (sustained-write stalls bounded); the
+  nbdkit-vs-vhost s3 production comparison is deferred until P1.6
+  lands (both legs would measure the same stall today).
+- Also: raw vhost leg rose 28.5k -> 35.4k IOPS after demoting hot-path
+  per-request Info logs to Debug (~24% logging tax was measured into
+  the frozen P-1.9 numbers; ratios and the F7 decision stand).
+
 ## What landed 2026-07-28 (5th drop): resume + F7 decided
 - IDE-crash handoff consumed: state re-verified (all branches pushed,
   local==fork byte-identical, trees clean, no orphans), regression
@@ -84,12 +105,12 @@ overlaps Phase 1 durability work and should be fixed on that branch.
 - P-1.7 [x]: s3-tests baseline frozen 123/621/94 (Phase 2 floor).
 
 ## Next action
-1. IN PROGRESS: wire the REAL viperblock WAL engine (not the raw-file
-   demo engine) behind the vhost-user backend as a serve mode; boot the
-   guest against it; re-run in-guest fio. Watch DECISIONS F7 qualifier
-   1: the engine REGRESSES writes at depth (global WAL write lock) --
-   transport alone will not show the win end to end; measure and
-   record honestly, then pair with engine write-concurrency work.
+1. Engine drain-stall fix (gate P1.6, the F7 critical path): bounded/
+   asynchronous drains + write concurrency so no single write waits on
+   a full synchronous drain (evidence: 246 s clat max, burst 27-36k
+   IOPS vs steady 592/324 -- see 6th drop). Then re-run the vhost rig
+   (engine vs raw) and the deferred s3-backed nbdkit-vs-vhost
+   production pair.
 2. F2 next slice: promotion/recovery from replica WALs, reconnect/
    resync, degraded-mode policy; then close the acked-but-unflushed
    memory window (14.2% measured) via replicate-on-WriteAt or
@@ -108,8 +129,9 @@ overlaps Phase 1 durability work and should be fixed on that branch.
 ## Gate snapshot
 Phase -1: 6/9 [x] (P-1.1, P-1.3, P-1.4, P-1.5, P-1.7, P-1.9) + 1/9 [~]
 (P-1.6) + open: P-1.2, P-1.8 . P0: 0/4 ticked (P0.2 runner exists,
-validated 6/6 today; s3-tests subset still missing) . P1: 2/5 [~]
-(P1.1, P1.4) . P2: 0/5 . P3: 0/6 . P4: 0/6 . P5: 0/4
+validated 6/6 today; s3-tests subset still missing) . P1: 2/6 [~]
+(P1.1, P1.4; P1.6 added 2026-07-28) . P2: 0/5 . P3: 0/6 . P4: 0/6 .
+P5: 0/4
 
 ## Standing reminders
 - ALL go commands: GOTOOLCHAIN=auto. Baselines additionally GOWORK=off.

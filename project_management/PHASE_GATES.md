@@ -255,6 +255,20 @@ that must meet them -- never after the implementation.
       box): the volatile-cache FUSE loss-count rig, and the barrier
       extending over F2 peer replication when the transport lands.
 - [ ] P1.5 Human notified: Phase 1 checkpoint review.
+- [ ] P1.6 Sustained-write stalls bounded (ADDED 2026-07-28, in the
+      open): under >= 60 s of sustained 4 KiB random writes through the
+      served path, no single write exceeds a stated latency bound
+      (bound set from baseline + the F2 latency/durability trade,
+      order 100 ms-class -- NOT minutes), and steady-state IOPS is a
+      stated fraction of burst IOPS. Oracle: fio clat max + per-1s
+      IOPS samples, same rig as the evidence below. Why added: the
+      F7 wiring slice measured single-write stalls of 246 s behind
+      synchronous backpressure drains end-to-end in-guest (burst 27-36k
+      IOPS vs steady-state 592/324; viperblock vhostuser/results/
+      2026-07-28_inguest_fio_real_engine_vs_raw_vhost.txt), confirming
+      the P-1.5(i) drain-stall (max 175-420 s) as a guest-visible
+      freeze. Previously only a STATUS backlog note; it gates Phase 1
+      because "EBS-grade" excludes minutes-long I/O freezes.
 
 ## Phase 2 -- EBS-grade backing store (Predastore)
 

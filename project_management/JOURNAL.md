@@ -140,6 +140,59 @@ Next (for whoever picks up remediation, NOT this chat): work the
 SECURITY_AUDIT_PRELIMINARY.md priority queue, reproduce each item before
 fixing. OPS-1 (rotate the working-tree token) is a human action.
 
+## 2026-07-28 10:50 -- F7 PRODUCTION WIRING: REAL ENGINE SERVES IN-GUEST
+##                     OVER VHOST-USER; TRANSPORT EXONERATED; DRAIN-STALL
+##                     IS THE CRITICAL PATH (P1.6 ADDED)
+Plan: STATUS next-action 1 -- wire the real viperblock WAL engine behind
+vhost-user-blk-serve, boot the rig guest against it, in-guest fio.
+Done:
+- Wiring slice (viperblock commit bee3b5b, feat/data-path-vhost-user-blk):
+  --vb-backend file|s3 modes on vhost-user-blk-serve, mirroring the
+  nbdkit plugin's production open sequence incl. first-open SaveState
+  (mirrors spinifex CreateVolume; found via the crash harness); a
+  zero-block-translating adapter (errors.Is on ErrZeroBlock -- the
+  engine returns valid zero-filled buffers with the sentinel; a naive
+  interface wire would fail every read of never-written blocks); volume
+  stays open across frontend reconnects (sidesteps the nbd close/open
+  race class); SIGTERM = DrainToBackend + Close (verified live: clean
+  teardown + reopen finds backend state). s3 credentials via env, not
+  argv (SP-5). Adapter test green under -race. Hot-path per-request
+  Info logs demoted to Debug (they were measured into the P-1.9 raw
+  numbers: raw leg now 35.4k IOPS vs 28.5k frozen, ~24%).
+- Rig reconstructed from the prior session's agent transcript (QEMU
+  launch line with bootindex + memfd; fio matrix; user rig@, not
+  debian@). Guest booted with TWO vhost devices from one binary:
+  vdb=real engine (file backend), vdc=raw file -- same boot, same
+  transport, direct engine-tax measurement.
+- Evidence (viperblock commit c28dfbe, vhostuser/results/2026-07-28_
+  inguest_fio_real_engine_vs_raw_vhost.txt): 16 MiB integrity green;
+  prefill seq 162 vs 827 MiB/s; 4k random matrix engine 592/324 write
+  d1/d16 + 3.1k reads vs raw 35.4k/35.2k/35.0k/35.2k. Diagnostic leg:
+  p99 write 65 us, burst avg 27.3k/max 36.2k IOPS, but clat max
+  246 SECONDS (a 10 s time_based fio took 248.8 s wall) -- the
+  P-1.5(i) drain-stall (synchronous backpressure drain past the
+  256 MiB watermark) reproduced end-to-end in-guest. Transport
+  exonerated; engine drain/concurrency is the critical path.
+- Records: DECISIONS F7 re-examination appended; NEW GATE P1.6
+  (sustained-write stalls bounded) added in the open; s3-backed
+  nbdkit-vs-vhost production pair explicitly deferred until the drain
+  fix (both legs would measure the same stall today).
+Failed/learned:
+- First boot wait looked like a hang but the guest was up: the rig
+  image's user is rig@, not debian@ (transcript, not memory, settled
+  it). Banked: rig VM = rig@127.0.0.1, key rig_ssh_key.
+- The 592-IOPS steady-state number would have been a false "engine is
+  slow per-op" conclusion without the latency distribution: p99 65 us
+  + 246 s max = scheduling pathology, not per-op cost. Distributions
+  before averages.
+Metrics: slice ~2.5 h incl. one guest boot (~7 min to SSH), 8-leg
+matrix ~8 min (stall-inflated), diag leg 249 s.
+Fork movement: F7 DECIDED (ack recorded 10:15); qualifier 1 promoted to
+critical path with end-to-end evidence.
+Next: engine drain-stall fix (gate P1.6: bounded/async drains + write
+concurrency) on the viperblock side; then re-run this rig + the s3
+production pair; F2 promotion/reconnect slice remains queued.
+
 ## 2026-07-28 10:15 -- RESUMED AFTER IDE CRASH (NEW AGENT); F7 ACKED ->
 ##                     DECIDED; DOCS REFRESHED
 Plan: (new agent) consume temp_resume_handoff.md, verify ground state,

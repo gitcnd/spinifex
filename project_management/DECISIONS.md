@@ -213,3 +213,21 @@ Escalation path: (b) vhost-user-blk is the presumptive endgame for VM
   parse. REMAINING before DECIDED-in-practice: wire the real viperblock
   WAL engine behind it (+ engine write concurrency, qualifier 1),
   multi-queue, reconnect.
+2026-07-28 WIRING EVIDENCE (post-ack slice, viperblock commits bee3b5b
+  + c28dfbe, artifact vhostuser/results/2026-07-28_inguest_fio_real_
+  engine_vs_raw_vhost.txt): the REAL WAL engine now serves in-guest
+  through vhost-user (production open sequence incl. first-open
+  SaveState, errors.Is ErrZeroBlock->zero-read translation, drain+close
+  on SIGTERM verified live; 16 MiB in-guest integrity green). The
+  transport is EXONERATED: p99 write latency 65 us end-to-end through
+  the full path, burst 27.3-36.2k IOPS ~ the raw-file ceiling (35.4k
+  same boot; the old 28.5k raw number carried ~24% hot-path Info-log
+  overhead, now demoted to Debug). BUT steady-state randwrite is 592
+  IOPS d1 / 324 d16: single writes stall up to 246 s behind the
+  engine's synchronous backpressure drain (same pathology as P-1.5(i),
+  max 175-420 s, now proven end-to-end in-guest). QUALIFIER 1 IS NOW
+  THE CRITICAL PATH: the engine drain/write-concurrency fix (Phase 1
+  gate P1.6, added 2026-07-28) precedes any further transport work.
+  The nbdkit-vs-vhost s3-backed production pair is DEFERRED until that
+  fix lands -- today both legs would measure the same engine stall,
+  adding no decision value.
