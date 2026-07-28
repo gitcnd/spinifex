@@ -311,14 +311,21 @@ that must meet them -- never after the implementation.
       A/B equal-or-better for slice 4 after ambient-variance triage
       (artifact viperblock/results/2026-07-28_p16_slice4_pipelined_
       drain.txt). Full suite green.
-      REMAINING (the only remaining content of this box): (a) final
-      bound-setting rig runs need repeated measurements or a quieter
-      host -- single-run in-guest latency maxima on this machine are
-      not decision-grade (measured swings up to 100x on identical
-      builds); propose the numeric bound to the human from repeated
-      runs; (b) saturated-OVERWRITE drain throughput (4-7 MB/s both
-      builds, chunk-supersede bookkeeping) is a separate named lever,
-      not part of this gate.
+      -> REPEATED-RUN VERIFICATION DONE (2026-07-28 evening, commits
+      ff6b2cb + d330d0f): phase A (file backend, 5 interleaved 30 s
+      saturated legs): engine clat max 41-67 ms, p99 59-70 us, raw
+      control's own ambient spikes reach 43 ms. Phase B (s3/predastore
+      production pair, 3 interleaved rounds, identical engine both
+      legs): clat max 27.6-109.3 ms across all six legs, vhost p99
+      73-82 us vs nbdkit 137-163 us. The 246 s -> 35 s -> 16 s stall
+      generations are gone on BOTH backends.
+      REMAINING (the only remaining content of this box): human ack of
+      the proposed bound -- "no single 4 KiB write under sustained
+      saturation exceeds 250 ms across a repeated-run distribution"
+      (measured maxima 67 ms file / 109.3 ms s3 = 2.3-3.7x margins) --
+      then encode it as the P1.6 assertion in the rig harness.
+      Saturated-OVERWRITE drain throughput stays a separate named
+      backlog lever, not part of this gate.
 
 ## Phase 2 -- EBS-grade backing store (Predastore)
 

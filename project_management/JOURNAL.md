@@ -140,6 +140,40 @@ Next (for whoever picks up remediation, NOT this chat): work the
 SECURITY_AUDIT_PRELIMINARY.md priority queue, reproduce each item before
 fixing. OPS-1 (rotate the working-tree token) is a human action.
 
+## 2026-07-28 evening -- P1.6 VERIFIED BOTH BACKENDS (250 ms BOUND
+##                     PROPOSED); F7 PRODUCTION PAIR MEASURED
+Plan: STATUS next-action 1+2 -- repeated-run verification, then the
+deferred s3 production pair.
+Done:
+- Phase A (file backend, one boot, 5 interleaved 30 s saturated legs
+  engine-vs-raw): engine clat max 41-67 ms across ALL legs (p99 59-70
+  us) -- the worst wait now equals one 4 MiB chunk upload, closing the
+  mechanism accounting. Raw control's own ambient spikes reach 43 ms,
+  so the engine sits ~1.6x the machine's noise floor. IOPS declines
+  across rounds (1478 -> 241) = the overwrite-throughput lever, flat
+  latency. Artifact: results/2026-07-28_p16_repeated_run_
+  distribution.txt (ff6b2cb).
+- Phase B (the deferred F7 production pair): identical merged engine
+  behind BOTH transports on the s3/predastore loopback cluster (plugin
+  rebuilt from the same merge with the banked pkgconfig-fixed recipe;
+  volumes seeded via the serve's first-open path; bucket via boto3
+  from the s3-tests venv -- no aws CLI on host). Results: vhost p99
+  73-82 us vs nbdkit 137-163 us; prefill 1.27x; steady IOPS same
+  class, vhost trending better; clat max 27.6-109.3 ms across all six
+  legs. No stall generations on either transport. Artifact:
+  results/2026-07-28_p16_phaseB_s3_production_pair.txt (d330d0f).
+- Records: P1.6 gate note updated (remaining = human ack of the
+  250 ms bound, then encode it as a harness assertion); DECISIONS F7
+  appended (production-pair evidence complete); STATUS NEEDS-HUMAN 1 =
+  bound ack request.
+Failed/learned: nothing new broke; the interleaved same-boot
+methodology (banked yesterday) delivered clean distributions where
+single runs had been noise.
+Metrics: phase A ~8 min of legs, phase B ~8.5 min + setup; session
+~1.5 h wall.
+Fork movement: F7 evidence completed (fork remains DECIDED).
+Next: F2 promotion/reconnect slice; P1.6 bound encoding on ack.
+
 ## 2026-07-29 (overnight) -- P1.6 SLICE 4 (PIPELINED DRAIN), VB-1 FIXED,
 ##                     P0.2 TICKED (7/7 RUNNER WITH S3-TESTS SUBSET)
 Plan: human asleep; work the STATUS queue autonomously (protocol 09).

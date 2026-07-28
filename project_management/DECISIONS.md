@@ -225,9 +225,19 @@ Escalation path: (b) vhost-user-blk is the presumptive endgame for VM
   overhead, now demoted to Debug). BUT steady-state randwrite is 592
   IOPS d1 / 324 d16: single writes stall up to 246 s behind the
   engine's synchronous backpressure drain (same pathology as P-1.5(i),
-  max 175-420 s, now proven end-to-end in-guest). QUALIFIER 1 IS NOW
+  max 175-420 s, now proven end-to-end in-guest).   QUALIFIER 1 IS NOW
   THE CRITICAL PATH: the engine drain/write-concurrency fix (Phase 1
   gate P1.6, added 2026-07-28) precedes any further transport work.
   The nbdkit-vs-vhost s3-backed production pair is DEFERRED until that
   fix lands -- today both legs would measure the same engine stall,
   adding no decision value.
+2026-07-28 PRODUCTION PAIR MEASURED (the deferred evidence, after
+  P1.6 slices 1-4 landed): identical engine both legs, s3/predastore
+  backend, one boot, interleaved (viperblock/results/2026-07-28_p16_
+  phaseB_s3_production_pair.txt): vhost p99 73-82 us vs nbdkit
+  137-163 us (the ~2x transport advantage HOLDS on the production
+  path); prefill 1.27x; steady IOPS same class with vhost trending
+  better (drain-rate-bound, ambient-noisy). No stall generations on
+  either leg (clat max 27.6-109.3 ms). F7's decision evidence is now
+  complete end-to-end; remaining engineering (multi-queue, reconnect,
+  spinifex attach-path integration) proceeds under the decided fork.

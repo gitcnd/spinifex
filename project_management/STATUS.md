@@ -2,34 +2,40 @@
 
 <!-- Overwrite-in-place. History lives in JOURNAL.md. -->
 
-Last updated: 2026-07-29 overnight (P1.6 slice 4 pipelined drain DONE
-with differential validation; VB-1 CRITICAL data-loss FIXED with
-pre/post reproducer; P0.2 TICKED -- 7/7 runner incl. new s3-tests
-subset; all pushed, machine clean -- morning review items below)
+Last updated: 2026-07-28 evening (P1.6 verification COMPLETE both
+backends: file 5-run clat max 41-67 ms, s3 production pair 27.6-109.3
+ms with vhost p99 2x better than nbdkit on the REAL engine; 250 ms
+bound PROPOSED -- your ack is NEEDS-HUMAN item 1. F7 production-pair
+evidence complete.)
 Current phase: Phase -1 nearly done (6/9 [x], 1/9 [~]) + P0 1/4 [x]
-+ Phase 1 OPEN (P1.1 [~], P1.4 [~], P1.6 [~] slices 1-4 done)
-Current slice: NEXT = P1.6 final bound proposal from REPEATED rig runs
-(single-run in-guest maxima proved non-decision-grade: 100x ambient
-swings on identical builds); then F2 promotion/reconnect slice; then
-the s3-backed nbdkit-vs-vhost production pair.
++ Phase 1 OPEN (P1.1 [~], P1.4 [~], P1.6 [~] verification done,
+bound ack pending)
+Current slice: NEXT = F2 promotion/reconnect slice (replica-WAL
+recovery, resync, degraded-mode policy) + the acked-unflushed window.
 
 ## NEEDS HUMAN
 
 Nothing blocking. Non-blocking queue:
-1. REVIEW (standing): F0/F1 were closed by delegated judgment call
+1. ACK REQUESTED (P1.6 bound): freeze the gate assertion as "no single
+   4 KiB write under sustained saturation exceeds 250 ms across a
+   repeated-run distribution" -- measured maxima 67 ms (file backend,
+   5 runs) and 109.3 ms (s3/predastore, 6 legs), i.e. 2.3-3.7x margin.
+   Evidence: viperblock/results/2026-07-28_p16_repeated_run_
+   distribution.txt + ..._p16_phaseB_s3_production_pair.txt.
+2. REVIEW (standing): F0/F1 were closed by delegated judgment call
    (DECISIONS.md) -- Outposts parity = service-set first then thin
    outposts.* API; "predastore as EBS" = harden the whole
    Viperblock+Predastore stack. Object if wrong.
-2. NVMe pair (2x 1.9 TB, idle isw_raid members): destructive use
+3. NVMe pair (2x 1.9 TB, idle isw_raid members): destructive use
    permitted? Needed by the realistic-performance phases.
-3. Optional: throwaway real AWS account for golden captures (fork F4).
-4. Root access only needed later for bridged VM networking (P-1.2 can
+4. Optional: throwaway real AWS account for golden captures (fork F4).
+5. Root access only needed later for bridged VM networking (P-1.2 can
    start with user networking).
-5. Standing, low priority: gitcnd/{viperblock,predastore} are plain
+6. Standing, low priority: gitcnd/{viperblock,predastore} are plain
    repos, not GitHub forks, so they cannot open PRs against mulgadc/*.
    If upstreaming becomes the goal: delete them, click Fork on the
    mulgadc repos, re-add to token, re-push (identical history, 2 min).
-6. Upstream-reportable (non-blocking): mulgadc/spinifex's new daemon
+7. Upstream-reportable (non-blocking): mulgadc/spinifex's new daemon
    test TestHandleEC2RunInstances_ValidKeyPairPassesValidation has a
    teardown race (flaky ~10-20% on this host, both net modes). Say the
    word and I'll draft the issue/PR from the spinifex fork.
@@ -67,6 +73,18 @@ overlaps Phase 1 durability work and should be fixed on that branch.
   - feat/shard-healer-and-read-repair: availability probe + P-1.6
     baseline + s3-tests rig + P-1.7 frozen baseline. ACTIVE for Phase 2.
   - feat/s3-api-surface-completion: created, no commits yet (Phase 2).
+
+## What landed 2026-07-28 evening (11th drop): P1.6 verified, F7 pair
+- Phase A (repeated-run distribution, file backend): 5 interleaved
+  saturated legs, engine clat max 41-67 ms (vs 246 s pre-fix, ~3700x),
+  p99 59-70 us; raw control's own ambient spikes reach 43 ms.
+- Phase B (the deferred F7 production pair, identical engine both
+  legs, s3/predastore): vhost p99 73-82 us vs nbdkit 137-163 us (the
+  2x transport advantage holds on the production path); prefill 1.27x;
+  clat max 27.6-109.3 ms across all legs -- no stall generations.
+- 250 ms saturation-latency bound PROPOSED (NEEDS HUMAN 1); F7
+  decision evidence complete end-to-end; artifacts pushed on the fix
+  branch (ff6b2cb + d330d0f).
 
 ## What landed 2026-07-29 overnight (10th drop): slice 4 + VB-1 + P0.2
 - P1.6 slice 4 (pipelined drain rounds): differential-validated (old
@@ -180,26 +198,23 @@ overlaps Phase 1 durability work and should be fixed on that branch.
 - P-1.7 [x]: s3-tests baseline frozen 123/621/94 (Phase 2 floor).
 
 ## Next action
-1. P1.6 final verification: repeated-run rig methodology (5+ runs per
-   build, report distribution of clat max) on a quiet window; propose
-   the numeric bound to the human. Also name-check the separate
-   saturated-overwrite drain-throughput lever (4-7 MB/s both builds).
-2. The deferred s3-backed nbdkit-vs-vhost production pair (same
-   repeated-run methodology).
-3. F2 next slice: promotion/recovery from replica WALs, reconnect/
+1. F2 next slice: promotion/recovery from replica WALs, reconnect/
    resync, degraded-mode policy; then close the acked-but-unflushed
    memory window (14.2% measured) via replicate-on-WriteAt or
    WAL-on-ack.
-4. Phase 2 (predastore) when opened: healer + read-repair + degraded/
+2. When the P1.6 bound is acked (NEEDS HUMAN 1): encode the 250 ms
+   assertion into a repeatable rig harness script.
+3. Phase 2 (predastore) when opened: healer + read-repair + degraded/
    quorum writes + metadata failover (P-1.6: 1 node down = writes 0%,
    reads 100% but ~2320x slower); then the S3 surface gaps (CopyObject,
    DeleteObjects, AbortMultipartUpload over HTTP, versioning).
-5. Backlog: P-1.2 single-node VM deploy (rig VM ready at
+4. Backlog: P-1.2 single-node VM deploy (rig VM ready at
    ../vm-images/rig-node1.qcow2, key rig_ssh_key); volatile-cache FUSE
    loss-count rig (P1.4 remainder); P0.3 golden-response harness;
-   saturated-overwrite drain throughput (named 2026-07-29); branch
-   consolidation: merge fix/backpressure-write-admission-latency +
-   feat/replicated-wal-durability when Phase 1 integration starts.
+   saturated-overwrite drain throughput (named lever); F7 build-out
+   under the decided fork (multi-queue, reconnect, spinifex attach
+   integration); branch consolidation: merge the backpressure fix +
+   durability branches when Phase 1 integration starts.
 
 ## Gate snapshot
 Phase -1: 6/9 [x] (P-1.1, P-1.3, P-1.4, P-1.5, P-1.7, P-1.9) + 1/9 [~]
