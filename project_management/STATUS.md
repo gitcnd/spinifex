@@ -2,15 +2,15 @@
 
 <!-- Overwrite-in-place. History lives in JOURNAL.md. -->
 
-Last updated: 2026-07-28 late (P1.6 CLOSED [x] -- bound acked, harness
-committed, closing run PASS 91.8 ms worst vs 250 ms. F2 PROMOTION
-slice LANDED: flushed writes survive primary loss via replica WALs
-alone. Next: reconnect/resync + acked-unflushed window.)
+Last updated: 2026-07-29 early (F2 RECONNECT/RESYNC slice LANDED:
+walrepl.ReconnectingClient with auto-reconnect, exponential backoff,
+pending-record resync, and configurable degraded mode. Next: wire into
+viperblock production, then acked-unflushed window or 500-crash harness.)
 Current phase: Phase -1 nearly done (6/9 [x], 1/9 [~]) + P0 1/4 [x]
-+ Phase 1 OPEN (P1.6 [x]; P1.1 [~] promotion done, P1.4 [~])
-Current slice: F2 continued -- reconnect/resync after replica loss,
-degraded-mode policy, then the acked-unflushed window (14.2%) via
-replicate-on-WriteAt or WAL-on-ack.
++ Phase 1 OPEN (P1.6 [x]; P1.1 [~] promotion+reconnect done, P1.4 [~])
+Current slice: F2 continued -- wire ReconnectingClient into production
+paths, then close the acked-unflushed window (14.2%) via WAL-on-ack or
+run 500-crash harness with replication.
 
 ## NEEDS HUMAN
 
@@ -69,6 +69,23 @@ overlaps Phase 1 durability work and should be fixed on that branch.
   - feat/shard-healer-and-read-repair: availability probe + P-1.6
     baseline + s3-tests rig + P-1.7 frozen baseline. ACTIVE for Phase 2.
   - feat/s3-api-surface-completion: created, no commits yet (Phase 2).
+
+## What landed 2026-07-29 early (12th drop): F2 reconnect/resync slice
+- walrepl.ReconnectingClient: automatic reconnect on connection break
+  with exponential backoff (100ms->30s, configurable); resyncs all pending
+  (unacked) records on successful reconnect; ReconnectAttempts bounds
+  retries (0=infinite, N=degraded mode after N failures); degraded mode
+  returns permanent errors. viperblock commit 31f730c (422 insertions).
+- Tests (walrepl_test.go, all green 0.545s): reconnect after server
+  restart resyncs 1 pending record + creates 2 replica files (one per
+  connection); exhausted reconnect enters degraded mode with 3 failed
+  attempts.
+- viperblock.VB: added ReplicationReconnectAttempts and
+  ReplicationInitialBackoff config fields (wiring to production paths
+  deferred).
+- Next: wire ReconnectingClient into production serving paths (nbdkit
+  plugin, vhost-serve), or tackle acked-unflushed window (14.2% measured
+  loss) via WAL-on-ack design.
 
 ## What landed 2026-07-28 evening (11th drop): P1.6 verified, F7 pair
 - Phase A (repeated-run distribution, file backend): 5 interleaved

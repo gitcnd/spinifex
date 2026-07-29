@@ -1227,6 +1227,41 @@ Fork movement: F0 OPEN->DECIDED (delegated); F1 LEANING->DECIDED
   (delegated); F6 created DECIDED.
 Next: P-1.1 baseline; crash harness.
 
+## 2026-07-29 (early) -- F2 RECONNECT/RESYNC SLICE: REPLICATINGCLIENT
+##                       WITH DEGRADED MODE
+Plan: implement automatic reconnect and resync for walrepl.Client (F2
+  continued slice, P1.1 remaining).
+Done:
+- walrepl.ReconnectingClient: wraps Client with automatic reconnect on
+  connection break, exponential backoff (100ms->30s max, configurable),
+  and resync of all pending (unacked) records on successful reconnect.
+  ReconnectAttempts bounds retries (0=infinite); exhaustion enters
+  degraded mode where all ops return permanent errors.
+- Key behaviors: Append() queues records in pending buffer and sends;
+  on send failure, triggers background reconnect loop; reconnect resyncs
+  all pending in sequence order + barriers; Barrier() waits for reconnect
+  if in progress then awaits replica ack; degraded mode fails permanently.
+- Tests (walrepl_test.go, all green 0.545s): (1) 10 records acked,
+  connection forced-closed, server restarted, 10 more appends trigger
+  reconnect+resync (1 pending sent), barrier succeeds, 2 replica files;
+  (2) connection broken, server killed, 3 reconnect attempts exhaust,
+  degraded mode entered, subsequent ops fail with "degraded mode" error.
+- viperblock.go: added ReplicationReconnectAttempts (0=infinite, N=fail
+  after N) and ReplicationInitialBackoff fields for ReconnectingClient
+  configuration (wiring deferred to next commit).
+Failed/learned:
+- Initial test failures due to TCP connection not detectably broken until
+  write/read attempted; tests needed to explicitly close client connection
+  to force reconnect path. Banked as a test-design pattern.
+- Mutex lock/unlock around client.Barrier() call initially caused races;
+  fixed by unlocking before blocking call and relocking after.
+Metrics: walrepl suite 0.545s (5 tests green).
+Fork movement: F2 slice "reconnect/resync" COMPLETE (degraded-mode policy
+  configurable via ReconnectAttempts).
+Next: wire ReconnectingClient into viperblock production paths; then
+  address acked-unflushed window (14.2%) or run 500-crash harness with
+  replication (P1.1 gate requirement).
+
 ## 2026-07-27 03:25 -- addendum: full build green
 Plan: record the background full-build result.
 Done:
